@@ -151,9 +151,61 @@ jobs:
           key: go-${{ runner.os }}-${{ runner.arch }}-live-${{ hashFiles('**/go.mod', '**/go.sum') }}
           restore-keys: go-${{ runner.os }}-${{ runner.arch }}-live-
 
+      - name: Create kind cluster for Kubernetes provider live tests
+        id: kind
+        run: |
+          set -euo pipefail
+          kind create cluster --name omnara-live --wait 120s
+          kubectl create namespace omnara-live-test --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n omnara-live-test create serviceaccount omnara-live-test --dry-run=client -o yaml | kubectl apply -f -
+          cat <<'YAML' | kubectl apply -f -
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: omnara-live-test
+            namespace: omnara-live-test
+          rules:
+            - apiGroups: [""]
+              resources: ["pods"]
+              verbs: [get, list, watch, create, delete]
+            - apiGroups: [""]
+              resources: ["secrets"]
+              verbs: [get, list, watch, create, update, patch, delete]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: omnara-live-test
+            namespace: omnara-live-test
+          subjects:
+            - kind: ServiceAccount
+              name: omnara-live-test
+              namespace: omnara-live-test
+          roleRef:
+            kind: Role
+            name: omnara-live-test
+            apiGroup: rbac.authorization.k8s.io
+          YAML
+          TOKEN="$(kubectl -n omnara-live-test create token omnara-live-test --duration 2160h)"
+          [ -n "$TOKEN" ] || { echo "kind ServiceAccount token is empty"; exit 1; }
+          SERVER="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+          CA="$(kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')"
+          export CA TOKEN SERVER
+          python3 - <<PYEOF >> "$GITHUB_ENV"
+          import base64
+          import json
+          import os
+          ca_pem = base64.b64decode(os.environ["CA"]).decode()
+          credential = json.dumps({"ca": ca_pem, "token": os.environ["TOKEN"]})
+          print("OMNARA_KUBERNETES_TEST_API_URL=" + os.environ["SERVER"])
+          print("OMNARA_KUBERNETES_TEST_NAMESPACE=omnara-live-test")
+          print("OMNARA_KUBERNETES_TEST_CREDENTIAL=" + credential)
+          PYEOF
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-test-db
         id: testdb
-        if: steps.secrets.outputs.openai == 'true' || steps.secrets.outputs.openrouter == 'true' || steps.secrets.outputs.anthropic == 'true' || steps.secrets.outputs.machines == 'true'
+        if: steps.secrets.outputs.openai == 'true' || steps.secrets.outputs.openrouter == 'true' || steps.secrets.outputs.anthropic == 'true' || steps.secrets.outputs.machines == 'true' || steps.kind.outputs.created == 'true'
 
       - run: make test-live-openai-responses || { echo "::warning::make test-live-openai-responses failed, retrying once"; make test-live-openai-responses; }
         if: ${{ !cancelled() && steps.testdb.outcome == 'success' && steps.secrets.outputs.openai == 'true' }}
@@ -192,7 +244,7 @@ jobs:
           UNIKRAFT_API_KEY: ${{ secrets.UNIKRAFT_API_KEY }}
 
       - name: Install cloudflared
-        if: ${{ !cancelled() && steps.testdb.outcome == 'success' && steps.secrets.outputs.machines == 'true' }}
+        if: ${{ !cancelled() && steps.testdb.outcome == 'success' && (steps.secrets.outputs.machines == 'true' || steps.kind.outputs.created == 'true') }}
         run: |
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/cloudflared" \
             https://github.com/cloudflare/cloudflared/releases/download/2026.10.3/cloudflared-linux-amd64
@@ -200,7 +252,7 @@ jobs:
           sudo install -m 0755 "$RUNNER_TEMP/cloudflared" /usr/local/bin/cloudflared
 
       - run: make test-live-machine-providers || { echo "::warning::make test-live-machine-providers failed, retrying once"; make test-live-machine-providers; }
-        if: ${{ !cancelled() && steps.testdb.outcome == 'success' && steps.secrets.outputs.machines == 'true' }}
+        if: ${{ !cancelled() && steps.testdb.outcome == 'success' && (steps.secrets.outputs.machines == 'true' || steps.kind.outputs.created == 'true') }}
         env:
           ARKER_API_KEY: ${{ secrets.ARKER_API_KEY }}
           BL_API_KEY: ${{ secrets.BL_API_KEY }}
@@ -212,7 +264,7 @@ jobs:
           SUPERSERVE_API_KEY: ${{ secrets.SUPERSERVE_API_KEY }}
 
       - name: Show database logs on failure
-        if: failure() && (steps.secrets.outputs.openai == 'true' || steps.secrets.outputs.openrouter == 'true' || steps.secrets.outputs.anthropic == 'true' || steps.secrets.outputs.machines == 'true')
+        if: failure() && (steps.secrets.outputs.openai == 'true' || steps.secrets.outputs.openrouter == 'true' || steps.secrets.outputs.anthropic == 'true' || steps.secrets.outputs.machines == 'true' || steps.kind.outputs.created == 'true')
         run: docker compose logs postgres redis
 
       - name: Stop test database

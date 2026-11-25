@@ -1,0 +1,97 @@
+---
+title: Kubernetes machines
+description: Run each machine as a Pod in a Kubernetes cluster you operate
+icon: "kubernetes"
+---
+
+On a self-hosted deployment, a Kubernetes pool runs each machine as a Pod in a [Kubernetes](https://kubernetes.io) cluster you operate. Omnara talks to the cluster's API server over HTTPS with a ServiceAccount bearer token stored in an organization secret, so Omnara itself can run anywhere — it never relies on running inside the same cluster.
+
+<Warning>
+  Kubernetes pools are for demos and testing only. Machines are Pods that share the cluster's nodes, so they're much less isolated than on the VM and sandbox providers. Don't use them for production or untrusted work.
+</Warning>
+
+## Set up a Kubernetes pool
+
+<Steps>
+  <Step title="Turn on the provider">
+    Set `OMNARA_KUBERNETES_POOLS_ENABLED` to `1` on the API deployment. The provider stays off by default.
+
+    ```bash
+    OMNARA_KUBERNETES_POOLS_ENABLED=1
+    ```
+  </Step>
+
+  <Step title="Create a namespace and ServiceAccount">
+    Machines live in one namespace with least-privilege RBAC, so a compromised machine can only touch its own Pod and Secret:
+
+    ```bash
+    kubectl create namespace omnara-machines
+    kubectl -n omnara-machines create serviceaccount omnara-machines
+    ```
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: omnara-machines
+      namespace: omnara-machines
+    rules:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: [get, list, watch, create, delete]
+      - apiGroups: [""]
+        resources: ["secrets"]
+        verbs: [get, list, watch, create, update, patch, delete]
+    ```
+  </Step>
+
+  <Step title="Mint a long-lived token">
+    Tokens from `kubectl create token` expire after an hour by default, which would break every machine. Mint one that lasts, and note the expiry where your team will see it:
+
+    ```bash
+    kubectl -n omnara-machines create token omnara-machines --duration 2160h
+    ```
+
+    For a token that survives ServiceAccount churn, create a token Secret instead (`type: kubernetes.io/service-account-token` with the `kubernetes.io/service-account.name` annotation) and read `.data.token` from it. Either way, store the token in an organization secret together with the cluster's CA certificate:
+
+    ```json
+    {"ca": "-----BEGIN CERTIFICATE-----...", "token": "..."}
+    ```
+
+    If the token expires or is revoked, the pool's connection check says so instead of failing silently: it reports rejected credentials as expired or invalid rather than timing out.
+  </Step>
+
+  <Step title="Create the pool">
+    In the dashboard, create a machine pool with provider `kubernetes`:
+
+    - `api_base_url`: the API server's HTTPS address, such as `https://192.0.2.1:6443` — a bare host, never a kubeconfig file. Cloud kubeconfigs (EKS, GKE) sign in through `exec` plugins that would run commands on Omnara's servers, so they are not accepted.
+    - credential secret: the JSON from the previous step, in an organization-owned secret. Never use in-cluster credentials: every organization on the deployment would share Omnara's own cluster access.
+    - optional `namespace` (default `default`) and `runtime_class_name`, like Docker's `runtime`, for gVisor or Kata isolation.
+    - `allowed_images` and the machine `image`, as with the other providers.
+  </Step>
+</Steps>
+
+## How Kubernetes machines differ
+
+- **One Pod per machine.** The Pod is named after the machine allocation (`omnara-mch-…`) and carries the `omnara-installation` and `omnara-machine` labels, mirroring Docker.
+- **Environment lives in a Secret.** The machine's environment — including the daemon token and the org's secret values, which Pod readers must not see — goes into a per-machine Secret loaded with `envFrom`. The Pod owns the Secret, so deleting the Pod deletes it.
+- **Hardened Pod spec.** Every machine Pod runs with `shareProcessNamespace: true` (so the pause container, not `omnarad`, stays PID 1 and reaps orphans), `automountServiceAccountToken: false`, `NET_RAW` dropped, a `RuntimeDefault` seccomp profile, `restartPolicy: Never`, and CPU and memory requests equal to limits.
+- **Unschedulable or unpullable images surface clearly.** A Pod stuck without nodes or failing to pull its image reports the scheduler or image reason instead of hanging silently. If the API server itself can't be reached, the machine is never reported as gone.
+- **Machines share your nodes.** A machine can fill a node's disk and every machine on it feels it. Cap disk with a namespace `LimitRange`, and set a Pod PID limit on the nodes (`podPidsLimit`). `kubectl drain` needs `--force` for machine Pods, and namespaces that enforce the `restricted` Pod Security profile reject them.
+- **Machines can reach your network,** including the cloud metadata service and other workloads in the cluster. On a cluster that only runs Omnara machines, block both with a NetworkPolicy, for example:
+
+  ```yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: block-metadata
+    namespace: omnara-machines
+  spec:
+    podSelector: {}
+    policyTypes: [Egress]
+    egress:
+      - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except: [169.254.169.254/32]
+  ```

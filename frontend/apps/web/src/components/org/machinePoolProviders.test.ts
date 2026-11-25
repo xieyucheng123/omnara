@@ -50,6 +50,8 @@ describe('Docker machine pools', () => {
     const values = (enabled: boolean) => machinePoolCreatableProviders(enabled).map((o) => o.value)
     expect(values(false)).not.toContain('docker')
     expect(values(true)).toContain('docker')
+    expect(machinePoolCreatableProviders(false, false)).not.toContain('kubernetes')
+    expect(machinePoolCreatableProviders(false, true)).toContain('kubernetes')
   })
 
   it('sends the Docker API URL and keeps the other saved settings', () => {

@@ -44,8 +44,12 @@ export const machinePoolProviders = Object.entries(machinePoolProviderDefinition
   .map(([value, definition]) => ({ value, label: definition.label }))
   .sort((a, b) => a.label.localeCompare(b.label))
 
-export function machinePoolCreatableProviders(dockerPoolsEnabled: boolean) {
-  return machinePoolProviders.filter((option) => dockerPoolsEnabled || option.value !== 'docker')
+export function machinePoolCreatableProviders(dockerPoolsEnabled: boolean, kubernetesPoolsEnabled = false) {
+  return machinePoolProviders.filter(
+    (option) =>
+      (dockerPoolsEnabled || option.value !== 'docker') &&
+      (kubernetesPoolsEnabled || option.value !== 'kubernetes'),
+  )
 }
 
 function scopedProviderConfig(
@@ -191,6 +195,7 @@ export function machinePoolCreateRequest(values: MachinePoolFormValues): CreateM
     case 'agent37':
     case 'arker':
     case 'docker':
+    case 'kubernetes':
     case 'freestyle':
     case 'modal':
     case 'tenki':
@@ -358,6 +363,7 @@ export function machinePoolUpdateRequest(
     case 'agent37':
     case 'arker':
     case 'docker':
+    case 'kubernetes':
     case 'freestyle':
     case 'modal':
     case 'tenki':
@@ -451,6 +457,7 @@ function clusterMachinePoolUpdateRequest(
     case 'agent37':
     case 'arker':
     case 'docker':
+    case 'kubernetes':
     case 'freestyle':
     case 'modal':
     case 'tenki':

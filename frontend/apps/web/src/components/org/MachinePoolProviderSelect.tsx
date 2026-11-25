@@ -33,7 +33,10 @@ export function MachinePoolProviderSelect({
           </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          {machinePoolCreatableProviders(webConfig?.dockerPoolsEnabled === true).map((option) => (
+          {machinePoolCreatableProviders(
+            webConfig?.dockerPoolsEnabled === true,
+            webConfig?.kubernetesPoolsEnabled === true,
+          ).map((option) => (
             <SelectItem key={option.value} value={option.value}>
               <ProviderOption provider={option.value} label={option.label} />
             </SelectItem>

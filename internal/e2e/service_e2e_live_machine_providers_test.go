@@ -99,6 +99,23 @@ func liveMachineProviders() []liveMachineProvider {
 				}
 			},
 		},
+		{
+			name:         "kubernetes",
+			env:          []string{"OMNARA_KUBERNETES_TEST_API_URL", "OMNARA_KUBERNETES_TEST_CREDENTIAL", "OMNARA_KUBERNETES_TEST_NAMESPACE"},
+			prepareStack: allowLiveKubernetesCluster,
+			pool: func(keys []string) (string, map[string]any) {
+				return keys[1], map[string]any{
+					"provider_config": map[string]any{"api_base_url": keys[0], "namespace": keys[2]},
+					"default_machine_provider_options": map[string]any{"image": "buildpack-deps:24.04-curl"},
+					"default_machine_cpu":              1,
+					"default_machine_memory_mb":        1024,
+					"max_machine_cpu":                  1,
+					"max_machine_memory_mb":            1024,
+					"max_total_cpu":                    1,
+					"max_total_memory_mb":              1024,
+				}
+			},
+		},
 		{name: "e2b", env: []string{"E2B_API_KEY"}, pool: func(keys []string) (string, map[string]any) {
 			return keys[0], map[string]any{
 				"default_machine_provider_options": map[string]any{"template": "base"},
@@ -193,6 +210,28 @@ func allowLiveDockerHost(t *testing.T, keys []string) error {
 	}
 	t.Setenv("OMNARA_PRIVATE_ENDPOINT_CIDRS", strings.Join(cidrs, ","))
 	t.Setenv("OMNARA_DOCKER_POOLS_ENABLED", "1")
+	return nil
+}
+
+func allowLiveKubernetesCluster(t *testing.T, keys []string) error {
+	apiBaseURL, err := url.Parse(keys[0])
+	if err != nil {
+		return err
+	}
+	port := apiBaseURL.Port()
+	if port == "" {
+		port = "443"
+	}
+	addresses, err := net.DefaultResolver.LookupHost(t.Context(), apiBaseURL.Hostname())
+	if err != nil {
+		return err
+	}
+	cidrs := []string{os.Getenv("OMNARA_PRIVATE_ENDPOINT_CIDRS")}
+	for _, address := range addresses {
+		cidrs = append(cidrs, net.JoinHostPort(address, port))
+	}
+	t.Setenv("OMNARA_PRIVATE_ENDPOINT_CIDRS", strings.Join(cidrs, ","))
+	t.Setenv("OMNARA_KUBERNETES_POOLS_ENABLED", "1")
 	return nil
 }
 

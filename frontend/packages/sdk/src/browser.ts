@@ -25,6 +25,7 @@ export interface WebConfig {
   apiURL?: string
   publicURL?: string
   dockerPoolsEnabled?: boolean
+  kubernetesPoolsEnabled?: boolean
 }
 
 type AuthRequestBody = Record<string, string | undefined>
@@ -45,6 +46,7 @@ const zWebConfigResponse = z.object({
   api_url: z.string().optional(),
   public_url: z.string().optional(),
   docker_pools_enabled: z.boolean().optional(),
+  kubernetes_pools_enabled: z.boolean().optional(),
 })
 
 const zDeviceAuthPendingResponse = z.object({
@@ -121,6 +123,7 @@ export async function fetchWebConfig(): Promise<WebConfig> {
     apiURL: data.api_url,
     publicURL: data.public_url,
     dockerPoolsEnabled: data.docker_pools_enabled,
+    kubernetesPoolsEnabled: data.kubernetes_pools_enabled,
   }
 }
 
