@@ -180,11 +180,11 @@ func TestKubernetesInspectNeverReportsMissingOnTransportFailure(t *testing.T) {
 
 func TestKubernetesCheckConnectionExplainsRejectedCredentials(t *testing.T) {
 	api := newFakeAPI()
-	api.checkNamespaceErr = transportStatusError(http.StatusUnauthorized, "Unauthorized")
+	api.checkConnectionErr = transportStatusError(http.StatusUnauthorized, "Unauthorized")
 	err := newTestProvider(api).CheckConnection(context.Background(), testMachineProvisioning(t, testImage, 2, 4096))
 	require.ErrorContains(t, err, "token is expired or invalid")
 
-	api.checkNamespaceErr = transportStatusError(http.StatusNotFound, "not found")
+	api.checkConnectionErr = transportStatusError(http.StatusNotFound, "not found")
 	err = newTestProvider(api).CheckConnection(context.Background(), testMachineProvisioning(t, testImage, 2, 4096))
 	require.ErrorContains(t, err, "namespace")
 }

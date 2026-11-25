@@ -17,7 +17,7 @@ import (
 )
 
 type apiClient interface {
-	CheckNamespace(context.Context) error
+	CheckConnection(context.Context) error
 	CreateSecret(context.Context, secretObject) error
 	InspectSecret(context.Context, string) (secretObject, bool, error)
 	PutSecretOwner(context.Context, secretObject, ownerReference) error
@@ -154,8 +154,8 @@ func (c *restClient) namespacePath(path string) string {
 	return "/api/v1/namespaces/" + c.namespace + path
 }
 
-func (c *restClient) CheckNamespace(ctx context.Context) error {
-	return c.do(ctx, http.MethodGet, c.namespacePath(""), nil, nil, nil)
+func (c *restClient) CheckConnection(ctx context.Context) error {
+	return c.do(ctx, http.MethodGet, c.namespacePath("/pods"), url.Values{"limit": {"1"}}, nil, nil)
 }
 
 func (c *restClient) CreateSecret(ctx context.Context, secret secretObject) error {
