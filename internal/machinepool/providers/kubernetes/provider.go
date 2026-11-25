@@ -39,9 +39,9 @@ type provider struct {
 }
 
 type machineLimits struct {
-	cpuMillis int64
+	cpuMillis   int64
 	memoryBytes int64
-	image     string
+	image       string
 }
 
 func (*provider) ProvisioningTimeout() time.Duration {

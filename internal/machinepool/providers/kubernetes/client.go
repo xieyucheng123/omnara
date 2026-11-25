@@ -44,8 +44,12 @@ type ownerReference struct {
 }
 
 type secretObject struct {
-	Metadata   objectMeta        `json:"metadata"`
+	Metadata objectMeta `json:"metadata"`
+	// StringData is write-only: the API server stores it as Data and never
+	// returns it. Data must be modeled too, otherwise a read-modify-write
+	// cycle (adopting the Secret's owner) would wipe the Secret's content.
 	StringData map[string]string `json:"stringData,omitempty"`
+	Data       map[string]string `json:"data,omitempty"`
 }
 
 type podObject struct {
