@@ -102,6 +102,7 @@ type Config struct {
 	APIRateLimitBurst                 int
 	DaemonReleaseURL                  string
 	DockerPoolsEnabled                bool
+	KubernetesPoolsEnabled            bool
 	WebServing                        WebServingMode
 	SecretEncryptionKeys              string
 	SecretEncryptionActiveKeyID       string
@@ -225,6 +226,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	kubernetesPoolsEnabled, err := getenvBool("OMNARA_KUBERNETES_POOLS_ENABLED", false)
+	if err != nil {
+		return Config{}, err
+	}
 	modelPricesRefreshEnabled, err := getenvBool("OMNARA_MODEL_PRICES_REFRESH_ENABLED", true)
 	if err != nil {
 		return Config{}, err
@@ -340,6 +345,7 @@ func Load() (Config, error) {
 		APIRateLimitBurst:                 apiRateLimitBurst,
 		DaemonReleaseURL:                  getenv(DaemonReleaseURLEnv, DefaultDaemonReleaseURL),
 		DockerPoolsEnabled:                dockerPoolsEnabled,
+		KubernetesPoolsEnabled:            kubernetesPoolsEnabled,
 		WebServing:                        WebServingMode(getenv("OMNARA_WEB_SERVING", string(WebServingDisabled))),
 		SecretEncryptionKeys:              getenv("OMNARA_SECRET_ENCRYPTION_KEYS", ""),
 		SecretEncryptionActiveKeyID:       getenv("OMNARA_SECRET_ENCRYPTION_ACTIVE_KEY_ID", ""),

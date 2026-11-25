@@ -453,6 +453,9 @@ func apiOptions(
 	if cfg.DockerPoolsEnabled {
 		opts = append(opts, httpapi.WithDockerPoolsEnabled())
 	}
+	if cfg.KubernetesPoolsEnabled {
+		opts = append(opts, httpapi.WithKubernetesPoolsEnabled())
+	}
 	if cfg.AllowInsecureDev {
 		opts = append(opts,
 			httpapi.WithAgentConfigOptions(agentconfig.CompileOptions{AllowInsecureLocalMCPHTTP: true}),
