@@ -26,6 +26,7 @@ const (
 	Docker     = "docker"
 	E2B        = "e2b"
 	Freestyle  = "freestyle"
+	Kubernetes = "kubernetes"
 	Modal      = "modal"
 	Superserve = "superserve"
 	Tenki      = "tenki"

@@ -87,18 +87,20 @@ func (s *Server) openapiYAMLRoute(w http.ResponseWriter, _ *http.Request) {
 }
 
 type webConfigResponse struct {
-	BillingURL         string `json:"billing_url,omitempty"`
-	APIURL             string `json:"api_url,omitempty"`
-	PublicURL          string `json:"public_url,omitempty"`
-	DockerPoolsEnabled bool   `json:"docker_pools_enabled,omitempty"`
+	BillingURL             string `json:"billing_url,omitempty"`
+	APIURL                 string `json:"api_url,omitempty"`
+	PublicURL              string `json:"public_url,omitempty"`
+	DockerPoolsEnabled     bool   `json:"docker_pools_enabled,omitempty"`
+	KubernetesPoolsEnabled bool   `json:"kubernetes_pools_enabled,omitempty"`
 }
 
 func (s *Server) webConfigRoute(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, webConfigResponse{
-		BillingURL:         s.billingURL,
-		APIURL:             s.publicAPIURL,
-		PublicURL:          s.publicURL,
-		DockerPoolsEnabled: s.dockerPoolsEnabled,
+		BillingURL:             s.billingURL,
+		APIURL:                 s.publicAPIURL,
+		PublicURL:              s.publicURL,
+		DockerPoolsEnabled:     s.dockerPoolsEnabled,
+		KubernetesPoolsEnabled: s.kubernetesPoolsEnabled,
 	})
 }
 

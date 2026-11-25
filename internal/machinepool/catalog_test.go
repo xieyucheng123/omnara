@@ -17,6 +17,7 @@ import (
 	"github.com/omnara-ai/omnara/internal/machinepool/providers/docker"
 	"github.com/omnara-ai/omnara/internal/machinepool/providers/e2b"
 	"github.com/omnara-ai/omnara/internal/machinepool/providers/freestyle"
+	"github.com/omnara-ai/omnara/internal/machinepool/providers/kubernetes"
 	"github.com/omnara-ai/omnara/internal/machinepool/providers/modal"
 	"github.com/omnara-ai/omnara/internal/machinepool/providers/superserve"
 	"github.com/omnara-ai/omnara/internal/machinepool/providers/tenki"
@@ -26,8 +27,8 @@ import (
 
 func TestDefaultCatalogProviders(t *testing.T) {
 	catalog := DefaultCatalog()
-	if len(catalog.definitions) != 13 {
-		t.Fatalf("default catalog providers = %d, want 13", len(catalog.definitions))
+	if len(catalog.definitions) != 14 {
+		t.Fatalf("default catalog providers = %d, want 14", len(catalog.definitions))
 	}
 	for _, test := range []struct {
 		name       string
@@ -42,6 +43,7 @@ func TestDefaultCatalogProviders(t *testing.T) {
 		{name: "docker", definition: docker.Definition{}},
 		{name: "e2b", definition: e2b.Definition{}},
 		{name: "freestyle", definition: freestyle.Definition{}},
+		{name: "kubernetes", definition: kubernetes.Definition{}},
 		{name: "modal", definition: modal.Definition{}},
 		{name: "superserve", definition: superserve.Definition{}},
 		{name: "tenki", definition: tenki.Definition{}},

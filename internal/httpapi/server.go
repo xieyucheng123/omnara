@@ -68,6 +68,7 @@ type Server struct {
 	agentConfigOptions                  agentconfig.CompileOptions
 	allowInsecureModelProviderEndpoints bool
 	dockerPoolsEnabled                  bool
+	kubernetesPoolsEnabled              bool
 	endpointAllowlist                   *ssrf.Allowlist
 	modelDiscoverer                     modelprovider.DiscoverFunc
 	modelLimitsCatalog                  *modelprovider.LimitsCatalog
@@ -362,6 +363,12 @@ func WithAllowInsecureModelProviderEndpoints() Option {
 func WithDockerPoolsEnabled() Option {
 	return func(s *Server) {
 		s.dockerPoolsEnabled = true
+	}
+}
+
+func WithKubernetesPoolsEnabled() Option {
+	return func(s *Server) {
+		s.kubernetesPoolsEnabled = true
 	}
 }
 

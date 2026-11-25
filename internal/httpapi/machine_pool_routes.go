@@ -161,6 +161,9 @@ func (s *Server) checkProviderEnabled(provider string) error {
 	if !s.dockerPoolsEnabled && provider == providers.Docker {
 		return apierror.FromCode(openapi.ErrorCodeInvalidRequest, "Docker machine pools are turned off on this deployment")
 	}
+	if !s.kubernetesPoolsEnabled && provider == providers.Kubernetes {
+		return apierror.FromCode(openapi.ErrorCodeInvalidRequest, "Kubernetes machine pools are turned off on this deployment")
+	}
 	return nil
 }
 
