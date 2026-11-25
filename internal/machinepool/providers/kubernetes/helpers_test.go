@@ -16,14 +16,14 @@ type fakeAPI struct {
 	secrets map[string]secretObject
 
 	checkConnectionErr error
-	createSecretErr   error
-	putSecretErr      error
-	createPodErr      error
-	losePodCreate     bool
-	deletePodErr      error
-	deleteSecretErr   error
-	inspectPodErr     error
-	listPodsErr       error
+	createSecretErr    error
+	putSecretErr       error
+	createPodErr       error
+	losePodCreate      bool
+	deletePodErr       error
+	deleteSecretErr    error
+	inspectPodErr      error
+	listPodsErr        error
 
 	podCreates    []podObject
 	secretCreates []secretObject
@@ -57,7 +57,11 @@ func (f *fakeAPI) CreateSecret(_ context.Context, secret secretObject) error {
 		return apiError{StatusCode: http.StatusConflict}
 	}
 	f.secretCreates = append(f.secretCreates, secret)
-	f.secrets[name] = secret
+	// Emulate the API server: stringData is write-only and comes back as data.
+	stored := secret
+	stored.Data = secret.StringData
+	stored.StringData = nil
+	f.secrets[name] = stored
 	return nil
 }
 

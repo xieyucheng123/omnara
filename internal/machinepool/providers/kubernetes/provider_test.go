@@ -73,6 +73,10 @@ func TestKubernetesProvisionCreatesPodWithSecretAndHardenedSpec(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Len(t, stored.Metadata.OwnerReferences, 1)
+	// The API server only returns data, never stringData: adopting the Secret
+	// must not wipe the machine environment.
+	require.Equal(t, "machine-token", stored.Data["OMNARA_MACHINE_TOKEN"])
+	require.Equal(t, "test", stored.Data["APP_ENV"])
 	require.Equal(t, "Pod", stored.Metadata.OwnerReferences[0].Kind)
 	require.Equal(t, "uid-"+name, stored.Metadata.OwnerReferences[0].UID)
 }
