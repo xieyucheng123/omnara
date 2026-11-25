@@ -306,7 +306,7 @@ func (p *provider) InspectMachine(
 }
 
 func (p *provider) CheckConnection(ctx context.Context, _ executionstore.MachineProvisioningConfig) error {
-	err := p.api.CheckNamespace(ctx)
+	err := p.api.CheckConnection(ctx)
 	if err == nil {
 		return nil
 	}

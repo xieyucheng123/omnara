@@ -15,7 +15,7 @@ type fakeAPI struct {
 	pods    map[string]podObject
 	secrets map[string]secretObject
 
-	checkNamespaceErr error
+	checkConnectionErr error
 	createSecretErr   error
 	putSecretErr      error
 	createPodErr      error
@@ -34,9 +34,9 @@ func newFakeAPI() *fakeAPI {
 	return &fakeAPI{pods: map[string]podObject{}, secrets: map[string]secretObject{}}
 }
 
-func (f *fakeAPI) CheckNamespace(context.Context) error {
-	if f.checkNamespaceErr != nil {
-		return f.checkNamespaceErr
+func (f *fakeAPI) CheckConnection(context.Context) error {
+	if f.checkConnectionErr != nil {
+		return f.checkConnectionErr
 	}
 	return nil
 }
