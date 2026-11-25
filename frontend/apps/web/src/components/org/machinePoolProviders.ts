@@ -342,11 +342,38 @@ const docker: MachinePoolProviderDefinition = {
   resources: { cpu: 'configured', memoryMb: 'configured' },
 }
 
+const kubernetes: MachinePoolProviderDefinition = {
+  label: 'Kubernetes',
+  resource: {
+    key: 'image',
+    label: 'Image',
+    placeholder: 'omnara/agent-sandbox',
+    description: 'A public registry image, or any image already on the cluster.',
+    descriptionHref: 'https://docs.omnara.com/self-hosting/kubernetes-machines',
+  },
+  scope: {
+    key: 'api_base_url',
+    label: 'Kubernetes API URL',
+    placeholder: 'https://k8s-api:6443',
+    required: true,
+    description: "The cluster API server's HTTPS address. Kubernetes pools are for demos and testing only.",
+  },
+  credential: {
+    label: 'Kubernetes bearer token',
+    placeholder: 'Search secrets for your Kubernetes ServiceAccount token…',
+    emptyDescription: 'No secrets yet — use New secret to store your Kubernetes bearer token.',
+    defaultSecretName: 'kubernetes-service-account',
+    secretValuePlaceholder: '{"ca":"-----BEGIN CERTIFICATE-----...","token":"..."}',
+  },
+  resources: { cpu: 'configured', memoryMb: 'configured' },
+}
+
 export const machinePoolProviderDefinitions = {
   unikraft,
   blaxel,
   daytona,
   docker,
+  kubernetes,
   modal,
   freestyle,
   tenki,
