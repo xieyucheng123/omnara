@@ -39,9 +39,9 @@ type provider struct {
 }
 
 type machineLimits struct {
-	cpu    string
-	memory string
-	image  string
+	cpuMillis int64
+	memoryBytes int64
+	image     string
 }
 
 func (*provider) ProvisioningTimeout() time.Duration {
@@ -243,8 +243,8 @@ func (p *provider) podObject(
 				Command: providers.ManagedDaemonLauncherArgs(),
 				EnvFrom: []envFromSource{{SecretRef: &secretRef{Name: secretName}}},
 				Resources: resourceRequirements{
-					Limits:   map[string]string{"cpu": limits.cpu, "memory": limits.memory},
-					Requests: map[string]string{"cpu": limits.cpu, "memory": limits.memory},
+					Limits:   map[string]string{"cpu": cpuMillisString(limits.cpuMillis), "memory": memoryMiString(limits.memoryBytes)},
+					Requests: map[string]string{"cpu": cpuMillisString(limits.cpuMillis), "memory": memoryMiString(limits.memoryBytes)},
 				},
 				SecurityContext: &containerSecurityContext{
 					Capabilities:   &linuxCapabilities{Drop: []string{"NET_RAW"}},
@@ -261,9 +261,9 @@ func (p *provider) podObject(
 
 func limitsFor(machineProvisioning executionstore.MachineProvisioningConfig, image string) machineLimits {
 	return machineLimits{
-		cpu:    fmt.Sprintf("%dm", (*machineProvisioning.CPU)*1000),
-		memory: fmt.Sprintf("%dMi", *machineProvisioning.MemoryMB),
-		image:  image,
+		cpuMillis:   int64(*machineProvisioning.CPU) * 1000,
+		memoryBytes: int64(*machineProvisioning.MemoryMB) * 1024 * 1024,
+		image:       image,
 	}
 }
 
@@ -274,9 +274,73 @@ func limitsOf(pod podObject) machineLimits {
 	}
 	container := pod.Spec.Containers[0]
 	limits.image = container.Image
-	limits.cpu = container.Resources.Requests["cpu"]
-	limits.memory = container.Resources.Requests["memory"]
+	limits.cpuMillis, _ = parseCPU(container.Resources.Requests["cpu"])
+	limits.memoryBytes, _ = parseMemory(container.Resources.Requests["memory"])
 	return limits
+}
+
+// parseCPU parses the decimalSI/both CPU forms the API server returns
+// ("1000m", "1", "1.5") into millicores. Unknown or empty values parse as
+// zero, which never matches a positive provisioning request.
+func parseCPU(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, errors.New("empty cpu quantity")
+	}
+	if strings.HasSuffix(value, "m") {
+		var millis int64
+		if _, err := fmt.Sscanf(strings.TrimSuffix(value, "m"), "%d", &millis); err != nil {
+			return 0, fmt.Errorf("invalid cpu quantity %q", value)
+		}
+		return millis, nil
+	}
+	var cores float64
+	if _, err := fmt.Sscanf(value, "%f", &cores); err != nil {
+		return 0, fmt.Errorf("invalid cpu quantity %q", value)
+	}
+	return int64(cores * 1000), nil
+}
+
+// parseMemory parses the binarySI/decimalSI memory forms the API server
+// returns ("1024Mi", "1Gi", "1073741824") into bytes.
+func parseMemory(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, errors.New("empty memory quantity")
+	}
+	multipliers := []struct {
+		suffix string
+		factor int64
+	}{
+		{"Ki", 1024},
+		{"Mi", 1024 * 1024},
+		{"Gi", 1024 * 1024 * 1024},
+		{"k", 1000},
+		{"M", 1000 * 1000},
+		{"G", 1000 * 1000 * 1000},
+	}
+	for _, multiplier := range multipliers {
+		if strings.HasSuffix(value, multiplier.suffix) {
+			var amount float64
+			if _, err := fmt.Sscanf(strings.TrimSuffix(value, multiplier.suffix), "%f", &amount); err != nil {
+				return 0, fmt.Errorf("invalid memory quantity %q", value)
+			}
+			return int64(amount * float64(multiplier.factor)), nil
+		}
+	}
+	var bytes int64
+	if _, err := fmt.Sscanf(value, "%d", &bytes); err != nil {
+		return 0, fmt.Errorf("invalid memory quantity %q", value)
+	}
+	return bytes, nil
+}
+
+func cpuMillisString(millis int64) string {
+	return fmt.Sprintf("%dm", millis)
+}
+
+func memoryMiString(bytes int64) string {
+	return fmt.Sprintf("%dMi", bytes/(1024*1024))
 }
 
 func (p *provider) InspectMachine(
