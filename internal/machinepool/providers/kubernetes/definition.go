@@ -105,6 +105,10 @@ func newProvider(
 	if daemonAPIURL == "" {
 		daemonAPIURL = runtimeConfig.OmnaraAPIURL
 	}
+	installerBaseURL := runtimeConfig.OmnaraAPIURL
+	if installerBaseURL == "" {
+		installerBaseURL = daemonAPIURL
+	}
 	return &provider{
 		api: &restClient{
 			baseURL:    config.APIBaseURL,
@@ -115,6 +119,7 @@ func newProvider(
 		namespace:        config.Namespace,
 		runtimeClassName: config.RuntimeClassName,
 		omnaraAPIURL:     daemonAPIURL,
+		installerBaseURL: installerBaseURL,
 	}, nil
 }
 

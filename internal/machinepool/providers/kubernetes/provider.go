@@ -36,6 +36,10 @@ type provider struct {
 	namespace        string
 	runtimeClassName string
 	omnaraAPIURL     string
+	// installerBaseURL derives OMNARA_INSTALLER_URL. It stays on the public
+	// URL: the /install/omnarad.sh route is only served there (cluster-local
+	// Service address 404s). Only OMNARA_API_URL uses the daemon override.
+	installerBaseURL string
 }
 
 type machineLimits struct {
@@ -81,10 +85,13 @@ func (p *provider) ProvisionMachine(
 	if err != nil {
 		return providers.ProvisionMachineResult{}, err
 	}
-	env, err := providers.BuildManagedMachineEnv(p.omnaraAPIURL, machineToken, options.StartupScript, machineEnv)
+	env, err := providers.BuildManagedMachineEnv(p.installerBaseURL, machineToken, options.StartupScript, machineEnv)
 	if err != nil {
 		return providers.ProvisionMachineResult{}, err
 	}
+	// Daemon callbacks use the (possibly cluster-local) override; the
+	// installer download stays on the public URL it was derived from.
+	env["OMNARA_API_URL"] = p.omnaraAPIURL
 	env[providers.ManagedBootstrapScriptEnvVar] = providers.ManagedBootScriptPayload()
 	secretName := name + secretNameSuffix
 	result := providers.ProvisionMachineResult{ProviderResourceID: name}
