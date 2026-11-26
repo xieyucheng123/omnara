@@ -74,6 +74,26 @@ func TestKubernetesProviderConfigValidation(t *testing.T) {
 	}
 }
 
+func TestKubernetesProviderDaemonAPIURL(t *testing.T) {
+	for raw, want := range map[string]string{
+		`{"api_base_url": "https://192.0.2.1:6443", "daemon_api_url": "http://omnara-api.omnara.svc:8080/api/v1"}`: "http://omnara-api.omnara.svc:8080/api/v1",
+		`{"api_base_url": "https://192.0.2.1:6443"}`:                                                               "",
+	} {
+		var config providerConfig
+		require.NoError(t, json.Unmarshal(json.RawMessage(raw), &config))
+		parsed, err := parseProviderConfig(json.RawMessage(raw))
+		require.NoError(t, err)
+		require.Equal(t, want, parsed.DaemonAPIURL, "config %s", raw)
+	}
+	for _, raw := range []string{
+		`{"api_base_url": "https://192.0.2.1:6443", "daemon_api_url": "notaurl"}`,
+		`{"api_base_url": "https://192.0.2.1:6443", "daemon_api_url": "ftp://x/"}`,
+	} {
+		_, err := parseProviderConfig(json.RawMessage(raw))
+		require.Error(t, err, "config %s", raw)
+	}
+}
+
 func TestKubernetesProviderCredentialValidation(t *testing.T) {
 	for credential, message := range map[string]string{
 		``:                     "credentials are required",
