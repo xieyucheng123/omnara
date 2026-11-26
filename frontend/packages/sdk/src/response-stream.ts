@@ -3,6 +3,10 @@ export function responseWithStreamLifetime(
   signal: AbortSignal,
   dispose: () => void,
 ): Response {
+  // 204 (and other null-body statuses) must not be wrapped: constructing a
+  // Response with a body under those statuses throws. Some fetch layers expose
+  // an empty stream instead of null, so check the status as well as the body.
+  if (response.status === 204 || response.status === 205 || response.status === 304) return response
   if (response.body === null) return response
   const wrapped = new Response(streamWithLifetime(response.body, signal, dispose), response)
   return copyResponseMetadata(wrapped, response)
