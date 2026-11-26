@@ -81,6 +81,31 @@ func TestKubernetesProvisionCreatesPodWithSecretAndHardenedSpec(t *testing.T) {
 	require.Equal(t, "uid-"+name, stored.Metadata.OwnerReferences[0].UID)
 }
 
+func TestKubernetesProvisionKeepsInstallerPublicWithDaemonOverride(t *testing.T) {
+	api := newFakeAPI()
+	p := &provider{api: api, namespace: "test-ns",
+		omnaraAPIURL:     "http://api-trial.omnara.svc:8080/api/v1",
+		installerBaseURL: "https://api.omnara.test/v1",
+	}
+	installationID, machineID := uuid.New(), uuid.New()
+	_, err := p.ProvisionMachine(
+		context.Background(),
+		installationID,
+		machineID,
+		testMachineProvisioning(t, testImage, 2, 4096),
+		"machine-token",
+		map[string]string{"APP_ENV": "test"},
+		true,
+	)
+	require.NoError(t, err)
+	require.Len(t, api.secretCreates, 1)
+	secret := api.secretCreates[0]
+	// Daemon callbacks go cluster-local; the installer still downloads
+	// from the public URL (the internal Service 404s /install/omnarad.sh).
+	require.Equal(t, "http://api-trial.omnara.svc:8080/api/v1", secret.StringData["OMNARA_API_URL"])
+	require.Equal(t, "https://api.omnara.test/install/omnarad.sh", secret.StringData["OMNARA_INSTALLER_URL"])
+}
+
 func TestKubernetesProvisionSetsRuntimeClassName(t *testing.T) {
 	api := newFakeAPI()
 	machineProvider := newTestProvider(api)
