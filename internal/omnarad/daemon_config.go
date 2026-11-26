@@ -324,7 +324,7 @@ func canonicalAPIURL(raw string) (string, error) {
 	if hostname == "" {
 		return "", errors.New("API URL host is required")
 	}
-	if scheme == "http" && hostname != "host.docker.internal" && !isLoopbackHost(hostname) {
+	if scheme == "http" && hostname != "host.docker.internal" && !isLoopbackHost(hostname) && !isClusterLocalHost(hostname) {
 		return "", errors.New("API URL must use https unless the host is local")
 	}
 	port := parsed.Port()
@@ -360,6 +360,18 @@ func isLoopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// isClusterLocalHost reports Kubernetes cluster-local DNS names, where TLS
+// is typically terminated at an ingress rather than the Service itself.
+// Plain http to these names never leaves the cluster network.
+func isClusterLocalHost(host string) bool {
+	for _, suffix := range []string{".svc", ".svc.cluster.local", ".cluster.local"} {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func loadRuntimeConfig(applyEnvironment bool) (machinedaemon.Config, bool, bool, error) {

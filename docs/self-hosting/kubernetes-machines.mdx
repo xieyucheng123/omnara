@@ -67,6 +67,7 @@ On a self-hosted deployment, a Kubernetes pool runs each machine as a Pod in a [
     - `api_base_url`: the API server's HTTPS address, such as `https://192.0.2.1:6443` — a bare host, never a kubeconfig file. Cloud kubeconfigs (EKS, GKE) sign in through `exec` plugins that would run commands on Omnara's servers, so they are not accepted.
     - credential secret: the JSON from the previous step, in an organization-owned secret. Never use in-cluster credentials: every organization on the deployment would share Omnara's own cluster access.
     - optional `namespace` (default `default`) and `runtime_class_name`, like Docker's `runtime`, for gVisor or Kata isolation.
+    - optional `daemon_api_url`: overrides the Omnara API URL baked into the machine environment (daemon callbacks only — the installer still downloads from the public URL). Only needed when machines cannot reach the public API URL, e.g. a cluster without hairpin access: point it at a cluster-local address such as `http://omnara-api.omnara.svc:8080/api/v1`. Plain `http` is accepted for `*.svc` / `*.svc.cluster.local` hosts.
     - `allowed_images` and the machine `image`, as with the other providers.
   </Step>
 </Steps>
