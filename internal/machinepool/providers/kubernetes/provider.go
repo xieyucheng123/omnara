@@ -43,7 +43,7 @@ type provider struct {
 	startupObservationWindow time.Duration
 }
 
-const defaultStartupObservationWindow = 5 * time.Second
+const defaultStartupObservationWindow = 90 * time.Second
 
 type machineLimits struct {
 	cpuMillis   int64
@@ -229,7 +229,7 @@ func (p *provider) resumeExistingPod(
 			}
 			return err
 		}
-		return nil
+		return p.waitForPodStartup(ctx, name)
 	case "Running":
 		return nil
 	case "Succeeded", "Failed":
@@ -582,11 +582,15 @@ func (p *provider) waitForPodStartup(ctx context.Context, name string) error {
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil
+			return fmt.Errorf(
+				"kubernetes pod %q did not start within %s; check the image, scheduling, and cluster events",
+				name,
+				window,
+			)
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("kubernetes pod %q did not start before the provisioning timeout: %w", name, ctx.Err())
 		case <-time.After(250 * time.Millisecond):
 		}
 	}

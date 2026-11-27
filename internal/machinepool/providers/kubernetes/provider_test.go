@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/omnara-ai/omnara/internal/machinepool/providers"
@@ -296,4 +297,26 @@ func TestKubernetesValidateMachineConfigRejectsInvalidEnvNames(t *testing.T) {
 	require.NoError(t, p.ValidateMachineConfig(executionstore.MachineProvisioningConfig{}, map[string]string{"GOOD_NAME": "1"}))
 	err := p.ValidateMachineConfig(executionstore.MachineProvisioningConfig{}, map[string]string{"BAD.NAME": "1"})
 	require.ErrorContains(t, err, "BAD.NAME")
+}
+
+func TestKubernetesWaitForPodStartupReturnsWhenRunning(t *testing.T) {
+	api := newFakeAPI()
+	p := newTestProvider(api)
+	p.startupObservationWindow = time.Second
+	installationID, machineID := uuid.New(), uuid.New()
+	name, _, _ := pendingPodWith(t, api, p, installationID, machineID)
+	pod := api.pods[name]
+	pod.Status = podStatus{Phase: "Running"}
+	api.pods[name] = pod
+	require.NoError(t, p.waitForPodStartup(context.Background(), name))
+}
+
+func TestKubernetesWaitForPodStartupReportsPendingTimeout(t *testing.T) {
+	api := newFakeAPI()
+	p := newTestProvider(api)
+	p.startupObservationWindow = 10 * time.Millisecond
+	installationID, machineID := uuid.New(), uuid.New()
+	name, _, _ := pendingPodWith(t, api, p, installationID, machineID)
+	err := p.waitForPodStartup(context.Background(), name)
+	require.ErrorContains(t, err, "did not start")
 }
