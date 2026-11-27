@@ -226,8 +226,8 @@ download_file() {
   command -v curl >/dev/null 2>&1 || die "curl is required to download omnarad"
   case "$download_url" in
     https://*)
-      run_with_timeout 210 run_public curl --disable --fail --silent --show-error --location \
-        --connect-timeout 10 --max-time 180 --max-redirs 5 \
+      run_with_timeout 660 run_public curl --disable --fail --silent --show-error --location \
+        --connect-timeout 10 --max-time 600 --max-redirs 5 --retry 2 --retry-delay 2 \
         --max-filesize "$download_limit" \
         --proto '=https' --proto-redir '=https' --output "$download_destination" "$download_url" \
         || die "download failed: $download_url"
