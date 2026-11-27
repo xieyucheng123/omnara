@@ -206,9 +206,13 @@ func (c *restClient) InspectPod(ctx context.Context, name string) (podObject, bo
 func (c *restClient) DeletePod(ctx context.Context, name string) error {
 	// Grace period zero mirrors Docker's force-remove: the machine's
 	// processes are SIGKILLed and the Pod disappears immediately instead
-	// of lingering in Terminating while the daemon shuts down.
-	body := map[string]any{"gracePeriodSeconds": int64(0)}
-	err := c.do(ctx, http.MethodDelete, c.namespacePath("/pods/"+url.PathEscape(name)), nil, body, nil)
+	// of lingering in Terminating while the daemon shuts down. Pass it as a
+	// query parameter, not a DeleteOptions body: admission policies that
+	// inspect object.metadata reject body-carrying DELETEs.
+	err := c.do(
+		ctx, http.MethodDelete, c.namespacePath("/pods/"+url.PathEscape(name)),
+		url.Values{"gracePeriodSeconds": {"0"}}, nil, nil,
+	)
 	if isNotFound(err) {
 		return nil
 	}

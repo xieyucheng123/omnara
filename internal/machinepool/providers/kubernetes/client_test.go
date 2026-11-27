@@ -113,12 +113,8 @@ func TestKubernetesWireDeletePodUsesZeroGrace(t *testing.T) {
 	require.NoError(t, client.DeletePod(context.Background(), "machine"))
 	require.Equal(t, http.MethodDelete, captured.method)
 	require.Equal(t, "/api/v1/namespaces/test-ns/pods/machine", captured.path)
-
-	var body struct {
-		GracePeriodSeconds int64 `json:"gracePeriodSeconds"`
-	}
-	require.NoError(t, json.Unmarshal(captured.body, &body))
-	require.Zero(t, body.GracePeriodSeconds)
+	require.Equal(t, "gracePeriodSeconds=0", captured.query)
+	require.Empty(t, captured.body)
 }
 
 func TestKubernetesWireConnectionAndStatuses(t *testing.T) {
