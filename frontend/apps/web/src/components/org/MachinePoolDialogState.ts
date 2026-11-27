@@ -56,8 +56,22 @@ function scopedProviderConfig(
   values: MachinePoolFormValues,
   saved?: MachinePool['provider_config'],
 ) {
-  const scope = machinePoolProviderDefinitions[values.provider].scope
-  return scope ? { ...saved, [scope.key]: values.providerScope.trim() } : undefined
+  const definition = machinePoolProviderDefinitions[values.provider]
+  const config: Record<string, unknown> = { ...saved }
+  if (definition.scope) config[definition.scope.key] = values.providerScope.trim()
+  if (definition.namespace) {
+    const value = values.providerNamespace.trim()
+    if (value === '') delete config[definition.namespace.key]
+    else config[definition.namespace.key] = value
+  }
+  if (definition.runtimeClassName) {
+    const value = values.providerRuntimeClass.trim()
+    if (value === '') delete config[definition.runtimeClassName.key]
+    else config[definition.runtimeClassName.key] = value
+  }
+  return definition.scope || definition.namespace || definition.runtimeClassName
+    ? config
+    : undefined
 }
 
 export function machinePoolProviderLabel(provider: string) {
@@ -69,6 +83,8 @@ export interface MachinePoolFormValues {
   description: string
   provider: MachinePoolProvider
   providerScope: string
+  providerNamespace: string
+  providerRuntimeClass: string
   image: string
   location: string
   startupScript: string
@@ -104,6 +120,8 @@ export const machinePoolFormDefaults: MachinePoolFormValues = {
   description: '',
   provider: 'blaxel',
   providerScope: '',
+  providerNamespace: '',
+  providerRuntimeClass: '',
   image: '',
   location: machinePoolProviderDefinitions.blaxel.location?.defaultValue ?? '',
   startupScript: '',
@@ -150,6 +168,8 @@ export function machinePoolFormAfterProviderChange(
     ...values,
     provider,
     providerScope: '',
+    providerNamespace: '',
+    providerRuntimeClass: '',
     image: '',
     location: nextDefinition.location?.defaultValue ?? '',
     cpu:
@@ -290,6 +310,14 @@ export function machinePoolFormFromPool(pool: MachinePool): MachinePoolFormValue
     providerScope:
       (definition.scope
         ? providerOptionStrings(pool.provider_config)[definition.scope.key]
+        : undefined) ?? '',
+    providerNamespace:
+      (definition.namespace
+        ? providerOptionStrings(pool.provider_config)[definition.namespace.key]
+        : undefined) ?? '',
+    providerRuntimeClass:
+      (definition.runtimeClassName
+        ? providerOptionStrings(pool.provider_config)[definition.runtimeClassName.key]
         : undefined) ?? '',
     image: options[definition.resource.key] ?? '',
     location: definition.location ? (options[definition.location.key] ?? '') : '',

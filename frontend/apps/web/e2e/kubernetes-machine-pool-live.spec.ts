@@ -8,6 +8,7 @@ const live = Boolean(statePath && credentialPath)
 
 const credential = credentialPath ? readFileSync(credentialPath, 'utf8').trim() : ''
 const apiURL = process.env.OMNARA_E2E_K8S_API_URL ?? 'https://kubernetes.default.svc:443'
+const namespace = process.env.OMNARA_E2E_K8S_NAMESPACE ?? 'omnara-machines'
 
 test.use({ storageState: statePath })
 
@@ -30,6 +31,7 @@ test('creates a Kubernetes pool against the real API and cluster', async ({ page
   await page.locator('#mpool-provider').click()
   await page.getByRole('option', { name: 'Kubernetes' }).click()
   await page.locator('#mpool-provider-scope').fill(apiURL)
+  await page.locator('#mpool-provider-namespace').fill(namespace)
 
   await page.getByRole('combobox', { name: 'Kubernetes bearer token' }).click()
   await page.getByRole('button', { name: 'New secret', exact: true }).click()
@@ -65,5 +67,5 @@ test('creates a Kubernetes pool against the real API and cluster', async ({ page
   }
   const pool = body.data.find((candidate) => candidate.name === poolName)
   expect(pool?.provider).toBe('kubernetes')
-  expect(pool?.provider_config).toMatchObject({ api_base_url: apiURL })
+  expect(pool?.provider_config).toMatchObject({ api_base_url: apiURL, namespace })
 })

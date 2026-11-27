@@ -5,6 +5,8 @@ import { currentUser, currentUserOrg, fakeId, machinePool } from '../src/test/fi
 
 const timestamp = '2026-01-01T00:00:00Z'
 const apiURL = 'https://k8s.example.test:6443'
+const namespace = 'omnara-machines'
+const runtimeClass = 'gvisor'
 const image = 'registry.example.test/omnara/agent-sandbox:test'
 const credentialValue = JSON.stringify({
   ca: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----',
@@ -116,6 +118,8 @@ async function fillKubernetesProviderStep(page: Page) {
   await page.locator('#mpool-name').fill('k8s-e2e')
   await chooseKubernetes(page)
   await page.locator('#mpool-provider-scope').fill(apiURL)
+  await page.locator('#mpool-provider-namespace').fill(namespace)
+  await page.locator('#mpool-provider-runtime-class').fill(runtimeClass)
 
   await page.getByRole('combobox', { name: 'Kubernetes bearer token' }).click()
   await page.getByRole('button', { name: 'New secret', exact: true }).click()
@@ -168,14 +172,22 @@ test.describe('Kubernetes machine pool', () => {
     expect(captured.checks[0]).toMatchObject({
       provider: 'kubernetes',
       provider_auth_secret_id: fakeId('sec'),
-      provider_config: { api_base_url: apiURL },
+      provider_config: {
+        api_base_url: apiURL,
+        namespace,
+        runtime_class_name: runtimeClass,
+      },
     })
 
     expect(captured.pools).toHaveLength(1)
     expect(captured.pools[0]).toMatchObject({
       name: 'k8s-e2e',
       provider: 'kubernetes',
-      provider_config: { api_base_url: apiURL },
+      provider_config: {
+        api_base_url: apiURL,
+        namespace,
+        runtime_class_name: runtimeClass,
+      },
       default_machine_cpu: 1,
       default_machine_memory_mb: 1024,
       max_total_machines: 3,

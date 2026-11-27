@@ -67,6 +67,8 @@ export function MachinePoolFieldGroupFields({
           </div>
           <MachinePoolDescriptionField {...fieldProps} />
           {scopeRequired && <MachinePoolScopeField {...fieldProps} />}
+          <MachinePoolNamespaceField {...fieldProps} />
+          <MachinePoolRuntimeClassField {...fieldProps} />
           <MachinePoolCredentialField
             orgId={orgId}
             enabled={enabled}
@@ -220,6 +222,44 @@ function MachinePoolScopeField({ values, setValue, errors }: MachinePoolFieldPro
         setValue('providerScope', providerScope)
       }}
       error={errors.providerScope}
+    />
+  )
+}
+
+function MachinePoolNamespaceField({ values, setValue, errors }: MachinePoolFieldProps) {
+  const field = machinePoolProviderDefinitions[values.provider].namespace
+  if (!field) return null
+  return (
+    <MachinePoolInputField
+      id="mpool-provider-namespace"
+      label={field.label}
+      value={values.providerNamespace}
+      placeholder={field.placeholder}
+      description={field.description}
+      autoComplete="off"
+      onValueChange={(value) => {
+        setValue('providerNamespace', value)
+      }}
+      error={errors.providerNamespace}
+    />
+  )
+}
+
+function MachinePoolRuntimeClassField({ values, setValue, errors }: MachinePoolFieldProps) {
+  const field = machinePoolProviderDefinitions[values.provider].runtimeClassName
+  if (!field) return null
+  return (
+    <MachinePoolInputField
+      id="mpool-provider-runtime-class"
+      label={field.label}
+      value={values.providerRuntimeClass}
+      placeholder={field.placeholder}
+      description={field.description}
+      autoComplete="off"
+      onValueChange={(value) => {
+        setValue('providerRuntimeClass', value)
+      }}
+      error={errors.providerRuntimeClass}
     />
   )
 }

@@ -26,6 +26,18 @@ interface MachinePoolProviderDefinition {
     required: boolean
     description?: string
   }
+  namespace?: {
+    key: string
+    label: string
+    placeholder: string
+    description?: string
+  }
+  runtimeClassName?: {
+    key: string
+    label: string
+    placeholder: string
+    description?: string
+  }
   credential?: {
     label: string
     placeholder: string
@@ -364,6 +376,19 @@ const kubernetes: MachinePoolProviderDefinition = {
     emptyDescription: 'No secrets yet — use New secret to store your Kubernetes bearer token.',
     defaultSecretName: 'kubernetes-service-account',
     secretValuePlaceholder: '{"ca":"-----BEGIN CERTIFICATE-----...","token":"..."}',
+  },
+  namespace: {
+    key: 'namespace',
+    label: 'Namespace',
+    placeholder: 'omnara-machines',
+    description:
+      'Namespace the machines run in. Defaults to default; use a dedicated namespace with least-privilege RBAC.',
+  },
+  runtimeClassName: {
+    key: 'runtime_class_name',
+    label: 'Runtime class',
+    placeholder: 'gvisor',
+    description: 'Optional RuntimeClass for sandboxed isolation, such as gVisor or Kata.',
   },
   resources: { cpu: 'configured', memoryMb: 'configured' },
 }

@@ -11,6 +11,8 @@ import type { MachinePoolFormMode, MachinePoolFormValues } from './MachinePoolDi
 import { machinePoolProviderDefinitions } from './machinePoolProviders'
 
 const maxInt32 = 2_147_483_647
+const namespacePattern = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+const runtimeClassNamePattern = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]*[a-zA-Z0-9])?$/
 
 export function positiveInt32(value: string) {
   return value.trim() !== '' && optionalPositiveInt32Valid(value)
@@ -49,6 +51,8 @@ export const machinePoolFieldGroup: Record<MachinePoolFieldKey, MachinePoolField
   secretId: 'provider',
   image: 'image',
   providerScope: 'provider',
+  providerNamespace: 'provider',
+  providerRuntimeClass: 'provider',
   location: 'capacity',
   cpu: 'capacity',
   memoryGb: 'capacity',
@@ -96,6 +100,20 @@ export function machinePoolFieldErrors(
     }
     if (provider.scope?.required && values.providerScope.trim() === '') {
       errors.providerScope = `${provider.scope.label} is required.`
+    }
+    if (
+      provider.namespace &&
+      values.providerNamespace.trim() !== '' &&
+      !namespacePattern.test(values.providerNamespace.trim())
+    ) {
+      errors.providerNamespace = 'Use a DNS label such as omnara-machines.'
+    }
+    if (
+      provider.runtimeClassName &&
+      values.providerRuntimeClass.trim() !== '' &&
+      !runtimeClassNamePattern.test(values.providerRuntimeClass.trim())
+    ) {
+      errors.providerRuntimeClass = 'Use a RuntimeClass name such as gvisor.'
     }
     if (provider.location?.required && values.location.trim() === '') {
       errors.location = `${provider.location.label} is required.`
