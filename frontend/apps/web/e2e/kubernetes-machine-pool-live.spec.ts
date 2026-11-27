@@ -3,12 +3,15 @@ import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 
 const statePath = process.env.OMNARA_E2E_STATE
+const stateJSON = process.env.OMNARA_E2E_STATE_JSON
 const credentialPath = process.env.OMNARA_E2E_K8S_CREDENTIAL
+const credentialJSON = process.env.OMNARA_E2E_K8S_CREDENTIAL_JSON
 const apiURL = process.env.OMNARA_E2E_K8S_API_URL ?? ''
 const namespace = process.env.OMNARA_E2E_K8S_NAMESPACE ?? 'omnara-machines'
-const live = Boolean(statePath && credentialPath && apiURL)
+const live = Boolean((statePath || stateJSON) && (credentialPath || credentialJSON) && apiURL)
 
-const credential = credentialPath ? readFileSync(credentialPath, 'utf8').trim() : ''
+const credential = credentialJSON ?? (credentialPath ? readFileSync(credentialPath, 'utf8').trim() : '')
+const storageState = stateJSON ? JSON.parse(stateJSON) : statePath
 
 let cleanupOrg: string | undefined
 let cleanupPool: string | undefined
@@ -25,7 +28,7 @@ test.afterEach(async ({ page }) => {
   cleanupOrg = cleanupPool = cleanupSecret = undefined
 })
 
-test.use({ storageState: statePath })
+test.use({ storageState })
 
 test('creates a Kubernetes pool against the real API and cluster', async ({ page }) => {
   test.skip(
