@@ -155,7 +155,10 @@ func (f *fakeAPI) ListPods(_ context.Context, _ string) ([]podObject, error) {
 }
 
 func newTestProvider(api apiClient) *provider {
-	return &provider{api: api, namespace: "test-ns", omnaraAPIURL: "https://api.omnara.test/v1", startupObservationWindow: 0}
+	return &provider{
+		api: api, namespace: "test-ns",
+		omnaraAPIURL: "https://api.omnara.test/v1", startupObservationWindow: 0,
+	}
 }
 
 func testMachineProvisioning(t *testing.T, image string, cpu, memoryMB int) executionstore.MachineProvisioningConfig {

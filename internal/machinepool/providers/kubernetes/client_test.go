@@ -12,33 +12,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type capturedRequest struct {
+	method string
+	path   string
+	query  string
+	auth   string
+	body   []byte
+}
+
 // newWireClient serves the client against a real HTTP server so URL shape,
 // auth headers, and JSON bodies are covered instead of being hidden by the
 // in-memory fake.
-func newWireClient(t *testing.T, handler http.HandlerFunc) (*restClient, *httptest.Server) {
+func newWireClient(t *testing.T, status int, response string, captured *capturedRequest) *restClient {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		*captured = capturedRequest{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.RawQuery,
+			auth:   r.Header.Get("Authorization"),
+			body:   body,
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(response))
+	}))
 	t.Cleanup(server.Close)
 	return &restClient{
 		baseURL:    server.URL,
 		namespace:  "test-ns",
 		token:      "service-account-token",
 		httpClient: server.Client(),
-	}, server
+	}
 }
 
 func TestKubernetesWirePutSecretKeepsData(t *testing.T) {
-	var got map[string]any
-	client, _ := newWireClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPut, r.Method)
-		require.Equal(t, "/api/v1/namespaces/test-ns/secrets/machine-env", r.URL.Path)
-		require.Equal(t, "Bearer service-account-token", r.Header.Get("Authorization"))
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(body, &got))
-		require.NotContains(t, string(body), "stringData")
-		_, _ = w.Write([]byte(`{"metadata":{"name":"machine-env"}}`))
-	})
+	var captured capturedRequest
+	client := newWireClient(t, http.StatusOK, `{"metadata":{"name":"machine-env"}}`, &captured)
 
 	err := client.PutSecretOwner(context.Background(), secretObject{
 		Metadata: objectMeta{Name: "machine-env", ResourceVersion: "7"},
@@ -46,23 +56,22 @@ func TestKubernetesWirePutSecretKeepsData(t *testing.T) {
 	}, ownerReference{APIVersion: "v1", Kind: "Pod", Name: "machine", UID: "uid-1"})
 	require.NoError(t, err)
 
-	require.Equal(t, map[string]any{"OMNARA_MACHINE_TOKEN": "token"}, got["data"])
-	metadata := got["metadata"].(map[string]any)
-	require.Equal(t, "7", metadata["resourceVersion"])
-	owners := metadata["ownerReferences"].([]any)
-	require.Equal(t, "Pod", owners[0].(map[string]any)["kind"])
+	require.Equal(t, http.MethodPut, captured.method)
+	require.Equal(t, "/api/v1/namespaces/test-ns/secrets/machine-env", captured.path)
+	require.Equal(t, "Bearer service-account-token", captured.auth)
+	require.NotContains(t, string(captured.body), "stringData")
+
+	var sent secretObject
+	require.NoError(t, json.Unmarshal(captured.body, &sent))
+	require.Equal(t, map[string]string{"OMNARA_MACHINE_TOKEN": "token"}, sent.Data)
+	require.Equal(t, "7", sent.Metadata.ResourceVersion)
+	require.Len(t, sent.Metadata.OwnerReferences, 1)
+	require.Equal(t, "Pod", sent.Metadata.OwnerReferences[0].Kind)
 }
 
 func TestKubernetesWireCreatePodShape(t *testing.T) {
-	var pod map[string]any
-	client, _ := newWireClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
-		require.Equal(t, "/api/v1/namespaces/test-ns/pods", r.URL.Path)
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(body, &pod))
-		_, _ = w.Write([]byte(`{"metadata":{"name":"machine","uid":"uid-1"}}`))
-	})
+	var captured capturedRequest
+	client := newWireClient(t, http.StatusCreated, `{"metadata":{"name":"machine","uid":"uid-1"}}`, &captured)
 
 	share := true
 	automount := false
@@ -85,47 +94,50 @@ func TestKubernetesWireCreatePodShape(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "uid-1", created.Metadata.UID)
+	require.Equal(t, http.MethodPost, captured.method)
+	require.Equal(t, "/api/v1/namespaces/test-ns/pods", captured.path)
 
-	spec := pod["spec"].(map[string]any)
-	require.Equal(t, true, spec["shareProcessNamespace"])
-	require.Equal(t, false, spec["automountServiceAccountToken"])
-	containers := spec["containers"].([]any)
-	container := containers[0].(map[string]any)
-	envFrom := container["envFrom"].([]any)
-	require.Equal(t, "machine-env", envFrom[0].(map[string]any)["secretRef"].(map[string]any)["name"])
+	var sent podObject
+	require.NoError(t, json.Unmarshal(captured.body, &sent))
+	require.True(t, *sent.Spec.ShareProcessNamespace)
+	require.False(t, *sent.Spec.AutomountServiceAccountToken)
+	require.Equal(t, "Never", sent.Spec.RestartPolicy)
+	require.Equal(t, "machine-env", sent.Spec.Containers[0].EnvFrom[0].SecretRef.Name)
+	require.Equal(t, sent.Spec.Containers[0].Resources.Requests, sent.Spec.Containers[0].Resources.Limits)
 }
 
 func TestKubernetesWireDeletePodUsesZeroGrace(t *testing.T) {
-	var body map[string]any
-	client, _ := newWireClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodDelete, r.Method)
-		require.Equal(t, "/api/v1/namespaces/test-ns/pods/machine", r.URL.Path)
-		raw, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		require.NoError(t, json.Unmarshal(raw, &body))
-		w.WriteHeader(http.StatusOK)
-	})
+	var captured capturedRequest
+	client := newWireClient(t, http.StatusOK, `{}`, &captured)
+
 	require.NoError(t, client.DeletePod(context.Background(), "machine"))
-	require.EqualValues(t, 0, body["gracePeriodSeconds"])
+	require.Equal(t, http.MethodDelete, captured.method)
+	require.Equal(t, "/api/v1/namespaces/test-ns/pods/machine", captured.path)
+
+	var body struct {
+		GracePeriodSeconds int64 `json:"gracePeriodSeconds"`
+	}
+	require.NoError(t, json.Unmarshal(captured.body, &body))
+	require.Zero(t, body.GracePeriodSeconds)
 }
 
 func TestKubernetesWireConnectionAndStatuses(t *testing.T) {
-	client, _ := newWireClient(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodGet, r.Method)
-		require.Equal(t, "/api/v1/namespaces/test-ns/pods", r.URL.Path)
-		require.Equal(t, "1", r.URL.Query().Get("limit"))
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"items":[]}`))
-	})
+	var captured capturedRequest
+	client := newWireClient(t, http.StatusOK, `{"items":[]}`, &captured)
 	require.NoError(t, client.CheckConnection(context.Background()))
+	require.Equal(t, http.MethodGet, captured.method)
+	require.Equal(t, "/api/v1/namespaces/test-ns/pods", captured.path)
+	require.Equal(t, "limit=1", captured.query)
 
-	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusConflict, http.StatusUnprocessableEntity} {
-		status := status
+	for _, status := range []int{
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusConflict,
+		http.StatusUnprocessableEntity,
+	} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
-			c, _ := newWireClient(t, func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(status)
-				_, _ = w.Write([]byte(`{"message":"rejected"}`))
-			})
+			var request capturedRequest
+			c := newWireClient(t, status, `{"message":"rejected"}`, &request)
 			err := c.CheckConnection(context.Background())
 			require.Error(t, err)
 			got, ok := providers.HTTPStatus(err)
@@ -136,10 +148,9 @@ func TestKubernetesWireConnectionAndStatuses(t *testing.T) {
 }
 
 func TestKubernetesWireNotFoundIsNotAnErrorForInspectOrDelete(t *testing.T) {
-	client, _ := newWireClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"message":"not found"}`))
-	})
+	var captured capturedRequest
+	client := newWireClient(t, http.StatusNotFound, `{"message":"not found"}`, &captured)
+
 	_, found, err := client.InspectPod(context.Background(), "missing")
 	require.NoError(t, err)
 	require.False(t, found)

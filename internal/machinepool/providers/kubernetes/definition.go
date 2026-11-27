@@ -132,7 +132,8 @@ func parseProviderConfig(raw json.RawMessage) (providerConfig, error) {
 		)
 	}
 	config.RuntimeClassName = strings.TrimSpace(config.RuntimeClassName)
-	if config.RuntimeClassName != "" && (len(config.RuntimeClassName) > 253 || !runtimeClassPattern.MatchString(config.RuntimeClassName)) {
+	if config.RuntimeClassName != "" &&
+		(len(config.RuntimeClassName) > 253 || !runtimeClassPattern.MatchString(config.RuntimeClassName)) {
 		return providerConfig{}, errors.New(
 			"kubernetes provider config runtime_class_name must be a runtime class name such as gvisor",
 		)

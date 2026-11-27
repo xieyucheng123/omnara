@@ -23,12 +23,6 @@ func runtimeTarget(t *testing.T, installationID, machineID uuid.UUID) providers.
 	}
 }
 
-func setPodPhase(api *fakeAPI, name, phase string) {
-	pod := api.pods[name]
-	pod.Status.Phase = phase
-	api.pods[name] = pod
-}
-
 func TestKubernetesRuntimeStateMapping(t *testing.T) {
 	for phase, want := range map[string]providers.RuntimeState{
 		"Pending":   providers.RuntimeStateTransitional,

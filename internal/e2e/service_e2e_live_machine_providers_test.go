@@ -100,8 +100,11 @@ func liveMachineProviders() []liveMachineProvider {
 			},
 		},
 		{
-			name:         "kubernetes",
-			env:          []string{"OMNARA_KUBERNETES_TEST_API_URL", "OMNARA_KUBERNETES_TEST_CREDENTIAL", "OMNARA_KUBERNETES_TEST_NAMESPACE"},
+			name: "kubernetes",
+			env: []string{
+				"OMNARA_KUBERNETES_TEST_API_URL", "OMNARA_KUBERNETES_TEST_CREDENTIAL",
+				"OMNARA_KUBERNETES_TEST_NAMESPACE",
+			},
 			prepareStack: allowLiveKubernetesCluster,
 			pool: func(keys []string) (string, map[string]any) {
 				return keys[1], map[string]any{

@@ -219,7 +219,9 @@ func TestKubernetesDeleteRemovesPodAndSecret(t *testing.T) {
 	))
 }
 
-func pendingPodWith(t *testing.T, api *fakeAPI, p *provider, installationID, machineID uuid.UUID) (string, map[string]string, string) {
+func pendingPodWith(
+	t *testing.T, api *fakeAPI, p *provider, installationID, machineID uuid.UUID,
+) (string, map[string]string, string) {
 	t.Helper()
 	name, labels, err := machineIdentity(installationID, machineID)
 	require.NoError(t, err)
@@ -242,12 +244,16 @@ func TestKubernetesPendingPodReportsUnschedulable(t *testing.T) {
 	name, labels, secretName := pendingPodWith(t, api, p, installationID, machineID)
 	pod := api.pods[name]
 	pod.Status = podStatus{
-		Phase:      "Pending",
-		Conditions: []podCondition{{Type: "PodScheduled", Status: "False", Message: "0/4 nodes are available: 4 Insufficient cpu"}},
+		Phase: "Pending",
+		Conditions: []podCondition{{
+			Type: "PodScheduled", Status: "False",
+			Message: "0/4 nodes are available: 4 Insufficient cpu",
+		}},
 	}
 	api.pods[name] = pod
 
-	err := p.resumeExistingPod(context.Background(), name, labels, secretName, map[string]string{}, limitsFor(testMachineProvisioning(t, testImage, 2, 4096), testImage))
+	limits := limitsFor(testMachineProvisioning(t, testImage, 2, 4096), testImage)
+	err := p.resumeExistingPod(context.Background(), name, labels, secretName, map[string]string{}, limits)
 	require.ErrorContains(t, err, "unschedulable")
 	require.ErrorContains(t, err, "Insufficient cpu")
 	require.NotErrorIs(t, err, providers.ErrPermanent)
@@ -262,13 +268,16 @@ func TestKubernetesPendingPodReportsImagePullBackOff(t *testing.T) {
 	pod.Status = podStatus{
 		Phase: "Pending",
 		ContainerStatuses: []containerStatus{{
-			Name:  containerName,
-			State: containerState{Waiting: &containerWaitingState{Reason: "ImagePullBackOff", Message: "Back-off pulling image"}},
+			Name: containerName,
+			State: containerState{Waiting: &containerWaitingState{
+				Reason: "ImagePullBackOff", Message: "Back-off pulling image",
+			}},
 		}},
 	}
 	api.pods[name] = pod
 
-	err := p.resumeExistingPod(context.Background(), name, labels, secretName, map[string]string{}, limitsFor(testMachineProvisioning(t, testImage, 2, 4096), testImage))
+	limits := limitsFor(testMachineProvisioning(t, testImage, 2, 4096), testImage)
+	err := p.resumeExistingPod(context.Background(), name, labels, secretName, map[string]string{}, limits)
 	require.ErrorContains(t, err, "ImagePullBackOff")
 	require.NotErrorIs(t, err, providers.ErrPermanent)
 }
@@ -288,13 +297,16 @@ func TestKubernetesPendingPodTreatsInvalidImageAsPermanent(t *testing.T) {
 	}
 	api.pods[name] = pod
 
-	err := p.resumeExistingPod(context.Background(), name, labels, secretName, map[string]string{}, limitsFor(testMachineProvisioning(t, testImage, 2, 4096), testImage))
+	limits := limitsFor(testMachineProvisioning(t, testImage, 2, 4096), testImage)
+	err := p.resumeExistingPod(context.Background(), name, labels, secretName, map[string]string{}, limits)
 	require.ErrorIs(t, err, providers.ErrPermanent)
 }
 
 func TestKubernetesValidateMachineConfigRejectsInvalidEnvNames(t *testing.T) {
 	p := newTestProvider(newFakeAPI())
-	require.NoError(t, p.ValidateMachineConfig(executionstore.MachineProvisioningConfig{}, map[string]string{"GOOD_NAME": "1"}))
+	require.NoError(t, p.ValidateMachineConfig(
+		executionstore.MachineProvisioningConfig{}, map[string]string{"GOOD_NAME": "1"},
+	))
 	err := p.ValidateMachineConfig(executionstore.MachineProvisioningConfig{}, map[string]string{"BAD.NAME": "1"})
 	require.ErrorContains(t, err, "BAD.NAME")
 }

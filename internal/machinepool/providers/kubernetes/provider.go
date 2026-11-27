@@ -272,8 +272,12 @@ func (p *provider) podObject(
 				Command: providers.ManagedDaemonLauncherArgs(),
 				EnvFrom: []envFromSource{{SecretRef: &secretRef{Name: secretName}}},
 				Resources: resourceRequirements{
-					Limits:   map[string]string{"cpu": cpuMillisString(limits.cpuMillis), "memory": memoryMiString(limits.memoryBytes)},
-					Requests: map[string]string{"cpu": cpuMillisString(limits.cpuMillis), "memory": memoryMiString(limits.memoryBytes)},
+					Limits: map[string]string{
+						"cpu": cpuMillisString(limits.cpuMillis), "memory": memoryMiString(limits.memoryBytes),
+					},
+					Requests: map[string]string{
+						"cpu": cpuMillisString(limits.cpuMillis), "memory": memoryMiString(limits.memoryBytes),
+					},
 				},
 				SecurityContext: &containerSecurityContext{
 					Capabilities:   &linuxCapabilities{Drop: []string{"NET_RAW"}},

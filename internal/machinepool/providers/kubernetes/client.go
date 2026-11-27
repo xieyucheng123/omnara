@@ -217,7 +217,10 @@ func (c *restClient) DeletePod(ctx context.Context, name string) error {
 
 func (c *restClient) ListPods(ctx context.Context, labelSelector string) ([]podObject, error) {
 	var response podList
-	err := c.do(ctx, http.MethodGet, c.namespacePath("/pods"), url.Values{"labelSelector": {labelSelector}}, nil, &response)
+	err := c.do(
+		ctx, http.MethodGet, c.namespacePath("/pods"),
+		url.Values{"labelSelector": {labelSelector}}, nil, &response,
+	)
 	if err != nil {
 		return nil, err
 	}

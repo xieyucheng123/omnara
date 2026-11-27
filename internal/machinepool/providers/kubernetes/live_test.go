@@ -22,7 +22,10 @@ func TestKubernetesProviderLiveSmoke(t *testing.T) {
 	credential := strings.TrimSpace(os.Getenv("OMNARA_KUBERNETES_TEST_CREDENTIAL"))
 	namespace := strings.TrimSpace(os.Getenv("OMNARA_KUBERNETES_TEST_NAMESPACE"))
 	if apiBaseURL == "" || credential == "" || namespace == "" {
-		t.Skip("OMNARA_KUBERNETES_TEST_API_URL, OMNARA_KUBERNETES_TEST_CREDENTIAL, and OMNARA_KUBERNETES_TEST_NAMESPACE are required")
+		t.Skip(
+			"OMNARA_KUBERNETES_TEST_API_URL, OMNARA_KUBERNETES_TEST_CREDENTIAL, and " +
+				"OMNARA_KUBERNETES_TEST_NAMESPACE are required",
+		)
 	}
 	image := strings.TrimSpace(os.Getenv("OMNARA_KUBERNETES_TEST_IMAGE"))
 	if image == "" {
