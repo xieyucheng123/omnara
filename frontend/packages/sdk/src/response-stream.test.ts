@@ -13,12 +13,12 @@ it.each([204, 205, 304])(
     })
     Object.defineProperty(response, 'status', { configurable: true, value: status })
 
-    const wrapped = responseWithStreamLifetime(
-      response,
-      new AbortController().signal,
-      () => undefined,
-    )
+    let disposed = false
+    const wrapped = responseWithStreamLifetime(response, new AbortController().signal, () => {
+      disposed = true
+    })
 
     expect(wrapped).toBe(response)
+    expect(disposed).toBe(true)
   },
 )

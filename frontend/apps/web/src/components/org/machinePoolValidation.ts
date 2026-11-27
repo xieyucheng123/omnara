@@ -12,7 +12,7 @@ import { machinePoolProviderDefinitions } from './machinePoolProviders'
 
 const maxInt32 = 2_147_483_647
 const namespacePattern = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
-const runtimeClassNamePattern = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]*[a-zA-Z0-9])?$/
+const runtimeClassNamePattern = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/
 
 export function positiveInt32(value: string) {
   return value.trim() !== '' && optionalPositiveInt32Valid(value)
@@ -111,7 +111,8 @@ export function machinePoolFieldErrors(
     if (
       provider.runtimeClassName &&
       values.providerRuntimeClass.trim() !== '' &&
-      !runtimeClassNamePattern.test(values.providerRuntimeClass.trim())
+      (values.providerRuntimeClass.trim().length > 253 ||
+        !runtimeClassNamePattern.test(values.providerRuntimeClass.trim()))
     ) {
       errors.providerRuntimeClass = 'Use a RuntimeClass name such as gvisor.'
     }

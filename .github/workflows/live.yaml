@@ -133,17 +133,14 @@ jobs:
           echo "configured=$configured" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.secrets.outputs.configured == 'true'
 
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         id: go
-        if: steps.secrets.outputs.configured == 'true'
         with:
           go-version-file: go.mod
           cache: false
 
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        if: steps.secrets.outputs.configured == 'true'
         with:
           path: |
             ~/go/pkg/mod
@@ -155,7 +152,7 @@ jobs:
         id: kind
         run: |
           set -euo pipefail
-          kind create cluster --name omnara-live --wait 120s
+          kind create cluster --name omnara-live --wait 300s
           kubectl create namespace omnara-live-test --dry-run=client -o yaml | kubectl apply -f -
           kubectl -n omnara-live-test create serviceaccount omnara-live-test --dry-run=client -o yaml | kubectl apply -f -
           cat <<'YAML' | kubectl apply -f -
@@ -167,10 +164,10 @@ jobs:
           rules:
             - apiGroups: [""]
               resources: ["pods"]
-              verbs: [get, list, watch, create, delete]
+              verbs: [get, list, create, delete]
             - apiGroups: [""]
               resources: ["secrets"]
-              verbs: [get, list, watch, create, update, patch, delete]
+              verbs: [get, create, update, delete]
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: RoleBinding
@@ -235,7 +232,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
       - run: make test-live-sandbox-providers || { echo "::warning::make test-live-sandbox-providers failed, retrying once"; make test-live-sandbox-providers; }
-        if: ${{ !cancelled() && steps.go.outcome == 'success' && steps.secrets.outputs.sandboxes == 'true' }}
+        if: ${{ !cancelled() && steps.go.outcome == 'success' && (steps.secrets.outputs.sandboxes == 'true' || steps.kind.outputs.created == 'true') }}
         env:
           BL_API_KEY: ${{ secrets.BL_API_KEY }}
           BL_WORKSPACE: ${{ secrets.BL_WORKSPACE }}
@@ -268,5 +265,5 @@ jobs:
         run: docker compose logs postgres redis
 
       - name: Stop test database
-        if: always() && (steps.secrets.outputs.openai == 'true' || steps.secrets.outputs.openrouter == 'true' || steps.secrets.outputs.anthropic == 'true' || steps.secrets.outputs.machines == 'true')
+        if: always() && (steps.secrets.outputs.openai == 'true' || steps.secrets.outputs.openrouter == 'true' || steps.secrets.outputs.anthropic == 'true' || steps.secrets.outputs.machines == 'true' || steps.kind.outputs.created == 'true')
         run: docker compose down -v

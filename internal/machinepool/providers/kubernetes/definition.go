@@ -19,21 +19,15 @@ const defaultNamespace = "default"
 
 var (
 	namespacePattern    = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
-	runtimeClassPattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9_.-]*[a-zA-Z0-9])?$`)
+	runtimeClassPattern = regexp.MustCompile(`^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$`)
 	errSecretNotMachine = errors.New("kubernetes secret does not belong to this machine")
 )
 
 type providerConfig struct {
-	APIBaseURL       string `json:"api_base_url"`
-	Namespace        string `json:"namespace,omitempty"`
-	RuntimeClassName string `json:"runtime_class_name,omitempty"`
-	// DaemonAPIURL overrides the Omnara API URL baked into machine
-	// environments. The public URL is unreachable from inside some
-	// clusters (hairpin blocked); point this at a cluster-local Service
-	// address such as http://omnara-api.omnara.svc:8080/api/v1 instead.
-	// Installer downloads still use the public URL.
-	DaemonAPIURL  string   `json:"daemon_api_url,omitempty"`
-	AllowedImages []string `json:"allowed_images,omitempty"`
+	APIBaseURL       string   `json:"api_base_url"`
+	Namespace        string   `json:"namespace,omitempty"`
+	RuntimeClassName string   `json:"runtime_class_name,omitempty"`
+	AllowedImages    []string `json:"allowed_images,omitempty"`
 }
 
 type providerCredential struct {
@@ -101,14 +95,6 @@ func newProvider(
 		runtimeConfig.HTTPRecorder,
 		providers.Kubernetes,
 	)
-	daemonAPIURL := config.DaemonAPIURL
-	if daemonAPIURL == "" {
-		daemonAPIURL = runtimeConfig.OmnaraAPIURL
-	}
-	installerBaseURL := runtimeConfig.OmnaraAPIURL
-	if installerBaseURL == "" {
-		installerBaseURL = daemonAPIURL
-	}
 	return &provider{
 		api: &restClient{
 			baseURL:    config.APIBaseURL,
@@ -116,10 +102,10 @@ func newProvider(
 			token:      token,
 			httpClient: httpClient,
 		},
-		namespace:        config.Namespace,
-		runtimeClassName: config.RuntimeClassName,
-		omnaraAPIURL:     daemonAPIURL,
-		installerBaseURL: installerBaseURL,
+		namespace:                config.Namespace,
+		runtimeClassName:         config.RuntimeClassName,
+		omnaraAPIURL:             runtimeConfig.OmnaraAPIURL,
+		startupObservationWindow: defaultStartupObservationWindow,
 	}, nil
 }
 
@@ -145,19 +131,8 @@ func parseProviderConfig(raw json.RawMessage) (providerConfig, error) {
 			"kubernetes provider config namespace must be a DNS label such as omnara-machines",
 		)
 	}
-	config.DaemonAPIURL = strings.TrimSpace(config.DaemonAPIURL)
-	if config.DaemonAPIURL != "" {
-		parsed, err := url.Parse(config.DaemonAPIURL)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return providerConfig{}, errors.New("kubernetes provider config daemon_api_url must be an absolute URL")
-		}
-		if parsed.Scheme != "http" && parsed.Scheme != "https" {
-			return providerConfig{}, errors.New("kubernetes provider config daemon_api_url must use http or https")
-		}
-		config.DaemonAPIURL = strings.TrimRight(config.DaemonAPIURL, "/")
-	}
 	config.RuntimeClassName = strings.TrimSpace(config.RuntimeClassName)
-	if config.RuntimeClassName != "" && !runtimeClassPattern.MatchString(config.RuntimeClassName) {
+	if config.RuntimeClassName != "" && (len(config.RuntimeClassName) > 253 || !runtimeClassPattern.MatchString(config.RuntimeClassName)) {
 		return providerConfig{}, errors.New(
 			"kubernetes provider config runtime_class_name must be a runtime class name such as gvisor",
 		)

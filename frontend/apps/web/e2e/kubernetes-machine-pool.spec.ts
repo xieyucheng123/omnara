@@ -26,7 +26,7 @@ type Captured = {
  */
 async function mockAPI(
   page: Page,
-  options: { kubernetesPoolsEnabled?: boolean; connectionFails?: boolean } = {},
+  options: { kubernetesPoolsEnabled?: boolean; dockerPoolsEnabled?: boolean; connectionFails?: boolean } = {},
 ) {
   const org = currentUserOrg()
   const captured: Captured = { secrets: [], pools: [], checks: [] }
@@ -51,7 +51,10 @@ async function mockAPI(
 
     if (path === '/api/web-config') {
       return route.fulfill({
-        json: { kubernetes_pools_enabled: options.kubernetesPoolsEnabled ?? true },
+        json: {
+          kubernetes_pools_enabled: options.kubernetesPoolsEnabled ?? true,
+          docker_pools_enabled: options.dockerPoolsEnabled ?? false,
+        },
       })
     }
     if (path === '/api/v1/me') {
@@ -198,12 +201,13 @@ test.describe('Kubernetes machine pool', () => {
   })
 
   test('hides Kubernetes when the deployment flag is off', async ({ page }) => {
-    await mockAPI(page, { kubernetesPoolsEnabled: false })
+    await mockAPI(page, { kubernetesPoolsEnabled: false, dockerPoolsEnabled: true })
     await openCreatePoolDialog(page)
     await page.locator('#mpool-provider').click()
     await expect(page.getByRole('option', { name: 'Kubernetes' })).toHaveCount(0)
-    // The other providers stay selectable, so this is gating, not a broken dialog.
-    await expect(page.getByRole('option', { name: 'Docker' })).toHaveCount(0)
+    // Docker is explicitly enabled, so this is Kubernetes gating rather than a
+    // dialog that failed to render its options.
+    await expect(page.getByRole('option', { name: 'Docker' })).toBeVisible()
     await expect(page.getByRole('option', { name: 'Modal' })).toBeVisible()
   })
 

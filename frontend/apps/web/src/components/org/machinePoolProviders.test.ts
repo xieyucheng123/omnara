@@ -47,7 +47,7 @@ describe('Docker machine pools', () => {
   })
 
   it('can be created only when the deployment turns Docker pools on', () => {
-    const values = (enabled: boolean) => machinePoolCreatableProviders(enabled).map((o) => o.value)
+    const values = (enabled: boolean) => machinePoolCreatableProviders(enabled, false).map((o) => o.value)
     expect(values(false)).not.toContain('docker')
     expect(values(true)).toContain('docker')
     expect(machinePoolCreatableProviders(false, false)).not.toContain('kubernetes')

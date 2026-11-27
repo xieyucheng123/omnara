@@ -112,6 +112,7 @@ services:
       OMNARA_BILLING_URL: ${OMNARA_BILLING_URL:-}
       OMNARA_DAEMON_RELEASE_URL: ${OMNARA_DAEMON_RELEASE_URL:-https://github.com/omnara-ai/omnara/releases/download/omnarad-stable}
       OMNARA_DOCKER_POOLS_ENABLED: ${OMNARA_DOCKER_POOLS_ENABLED:-0}
+      OMNARA_KUBERNETES_POOLS_ENABLED: ${OMNARA_KUBERNETES_POOLS_ENABLED:-0}
     volumes:
       - memory-data:/var/lib/omnara/memory
     depends_on:

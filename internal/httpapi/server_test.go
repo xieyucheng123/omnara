@@ -241,6 +241,7 @@ func TestWebConfigRoute(t *testing.T) {
 		wantAPIURL     string
 		wantPublicURL  string
 		wantDocker     bool
+		wantKubernetes bool
 	}{
 		{
 			name: "public config set",
@@ -249,11 +250,13 @@ func TestWebConfigRoute(t *testing.T) {
 				WithPublicAPIURL("https://api.omnara.test/v1/"),
 				WithPublicURL("https://dashboard.omnara.test/"),
 				WithDockerPoolsEnabled(),
+				WithKubernetesPoolsEnabled(),
 			},
 			wantBillingURL: "https://billing.omnara.test/credits",
 			wantAPIURL:     "https://api.omnara.test/v1",
 			wantPublicURL:  "https://dashboard.omnara.test",
 			wantDocker:     true,
+			wantKubernetes: true,
 		},
 		{name: "unset values omitted"},
 	}
@@ -291,6 +294,9 @@ func TestWebConfigRoute(t *testing.T) {
 			}
 			if got, ok := body["docker_pools_enabled"]; ok != tt.wantDocker || (ok && got != true) {
 				t.Fatalf("docker_pools_enabled = %v (present %t), want %t", got, ok, tt.wantDocker)
+			}
+			if got, ok := body["kubernetes_pools_enabled"]; ok != tt.wantKubernetes || (ok && got != true) {
+				t.Fatalf("kubernetes_pools_enabled = %v (present %t), want %t", got, ok, tt.wantKubernetes)
 			}
 		})
 	}

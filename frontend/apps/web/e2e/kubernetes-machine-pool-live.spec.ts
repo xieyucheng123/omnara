@@ -4,16 +4,34 @@ import { expect, test } from '@playwright/test'
 
 const statePath = process.env.OMNARA_E2E_STATE
 const credentialPath = process.env.OMNARA_E2E_K8S_CREDENTIAL
-const live = Boolean(statePath && credentialPath)
+const apiURL = process.env.OMNARA_E2E_K8S_API_URL ?? ''
+const namespace = process.env.OMNARA_E2E_K8S_NAMESPACE ?? 'omnara-machines'
+const live = Boolean(statePath && credentialPath && apiURL)
 
 const credential = credentialPath ? readFileSync(credentialPath, 'utf8').trim() : ''
-const apiURL = process.env.OMNARA_E2E_K8S_API_URL ?? 'https://kubernetes.default.svc:443'
-const namespace = process.env.OMNARA_E2E_K8S_NAMESPACE ?? 'omnara-machines'
+
+let cleanupOrg: string | undefined
+let cleanupPool: string | undefined
+let cleanupSecret: string | undefined
+
+test.afterEach(async ({ page }) => {
+  if (!cleanupOrg) return
+  if (cleanupPool) {
+    await page.request.delete(`/api/v1/orgs/${cleanupOrg}/machine-pools/${cleanupPool}`)
+  }
+  if (cleanupSecret) {
+    await page.request.delete(`/api/v1/orgs/${cleanupOrg}/secrets/${cleanupSecret}`)
+  }
+  cleanupOrg = cleanupPool = cleanupSecret = undefined
+})
 
 test.use({ storageState: statePath })
 
 test('creates a Kubernetes pool against the real API and cluster', async ({ page }) => {
-  test.skip(!live, 'OMNARA_E2E_STATE and OMNARA_E2E_K8S_CREDENTIAL are required')
+  test.skip(
+    !live,
+    'OMNARA_E2E_STATE, OMNARA_E2E_K8S_CREDENTIAL and OMNARA_E2E_K8S_API_URL are required',
+  )
   test.setTimeout(120_000)
 
   const suffix = Date.now().toString(36)
@@ -60,12 +78,24 @@ test('creates a Kubernetes pool against the real API and cluster', async ({ page
         .omnaraBrowserContext?.organizationIds[0],
   )
   expect(orgID).toBeTruthy()
+  cleanupOrg = orgID
   const response = await page.request.get(`/api/v1/orgs/${orgID ?? ''}/machine-pools`)
   expect(response.ok()).toBeTruthy()
   const body = (await response.json()) as {
-    data: { name: string; provider: string; provider_config: Record<string, unknown> }[]
+    data: {
+      id: string
+      name: string
+      provider: string
+      provider_config: Record<string, unknown>
+    }[]
   }
   const pool = body.data.find((candidate) => candidate.name === poolName)
   expect(pool?.provider).toBe('kubernetes')
   expect(pool?.provider_config).toMatchObject({ api_base_url: apiURL, namespace })
+  cleanupPool = pool?.id
+
+  const secrets = await page.request.get(`/api/v1/orgs/${orgID ?? ''}/secrets`)
+  expect(secrets.ok()).toBeTruthy()
+  const secretBody = (await secrets.json()) as { data: { id: string; name: string }[] }
+  cleanupSecret = secretBody.data.find((candidate) => candidate.name === secretName)?.id
 })

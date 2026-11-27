@@ -97,12 +97,19 @@ func TestKubernetesRuntimeBulkObservation(t *testing.T) {
 	require.Equal(t, providers.RuntimeStateTransitional, observations[1].State)
 }
 
-func TestKubernetesPendingMessageSurfacesSchedulerAndImageReasons(t *testing.T) {
-	require.Contains(t, pendingMessage(podObject{Status: podStatus{Conditions: []podCondition{{
+func TestKubernetesPendingFailureDetectsSchedulerAndImageReasons(t *testing.T) {
+	message, failed := pendingFailure(podObject{Status: podStatus{Conditions: []podCondition{{
 		Type: "PodScheduled", Status: "False", Message: "0/3 nodes are available",
-	}}}}), "0/3 nodes are available")
-	require.Contains(t, pendingMessage(podObject{Status: podStatus{ContainerStatuses: []containerStatus{{
+	}}}})
+	require.True(t, failed)
+	require.Contains(t, message, "0/3 nodes are available")
+
+	message, failed = pendingFailure(podObject{Status: podStatus{ContainerStatuses: []containerStatus{{
 		State: containerState{Waiting: &containerWaitingState{Reason: "ImagePullBackOff", Message: "pull failed"}},
-	}}}}), "ImagePullBackOff")
-	require.Equal(t, "", pendingMessage(podObject{Status: podStatus{Phase: "Running"}}))
+	}}}})
+	require.True(t, failed)
+	require.Contains(t, message, "ImagePullBackOff")
+
+	_, failed = pendingFailure(podObject{Status: podStatus{Phase: "Running"}})
+	require.False(t, failed)
 }

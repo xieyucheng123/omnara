@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -36,11 +37,13 @@ type provider struct {
 	namespace        string
 	runtimeClassName string
 	omnaraAPIURL     string
-	// installerBaseURL derives OMNARA_INSTALLER_URL. It stays on the public
-	// URL: the /install/omnarad.sh route is only served there (cluster-local
-	// Service address 404s). Only OMNARA_API_URL uses the daemon override.
-	installerBaseURL string
+	// startupObservationWindow bounds how long provisioning watches a fresh
+	// Pod for scheduler or image-pull failures before returning success.
+	// Zero disables the watch (unit tests).
+	startupObservationWindow time.Duration
 }
+
+const defaultStartupObservationWindow = 5 * time.Second
 
 type machineLimits struct {
 	cpuMillis   int64
@@ -65,7 +68,17 @@ func (*provider) PrepareProvisioning(
 	}, nil
 }
 
-func (*provider) ValidateMachineConfig(executionstore.MachineProvisioningConfig, map[string]string) error {
+var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func (*provider) ValidateMachineConfig(_ executionstore.MachineProvisioningConfig, machineEnv map[string]string) error {
+	for key := range machineEnv {
+		if !envNamePattern.MatchString(key) {
+			return fmt.Errorf(
+				"machine environment variable %q is not a valid Kubernetes environment variable name",
+				key,
+			)
+		}
+	}
 	return nil
 }
 
@@ -85,13 +98,10 @@ func (p *provider) ProvisionMachine(
 	if err != nil {
 		return providers.ProvisionMachineResult{}, err
 	}
-	env, err := providers.BuildManagedMachineEnv(p.installerBaseURL, machineToken, options.StartupScript, machineEnv)
+	env, err := providers.BuildManagedMachineEnv(p.omnaraAPIURL, machineToken, options.StartupScript, machineEnv)
 	if err != nil {
 		return providers.ProvisionMachineResult{}, err
 	}
-	// Daemon callbacks use the (possibly cluster-local) override; the
-	// installer download stays on the public URL it was derived from.
-	env["OMNARA_API_URL"] = p.omnaraAPIURL
 	env[providers.ManagedBootstrapScriptEnvVar] = providers.ManagedBootScriptPayload()
 	secretName := name + secretNameSuffix
 	result := providers.ProvisionMachineResult{ProviderResourceID: name}
@@ -102,7 +112,10 @@ func (p *provider) ProvisionMachine(
 	created, err := p.api.CreatePod(ctx, p.podObject(name, labels, secretName, options.Image, limits))
 	switch {
 	case err == nil:
-		return result, p.ownSecret(ctx, secretName, labels, created.Metadata.UID)
+		if err := p.ownSecret(ctx, secretName, labels, created.Metadata.UID); err != nil {
+			return result, err
+		}
+		return result, p.waitForPodStartup(ctx, name)
 	case isConflict(err):
 		return result, p.resumeExistingPod(ctx, name, labels, secretName, env, limits)
 	case isPermanentStatus(err):
@@ -208,7 +221,16 @@ func (p *provider) resumeExistingPod(
 		return err
 	}
 	switch existing.Status.Phase {
-	case "Pending", "Running":
+	case "Pending":
+		if message, failed := pendingFailure(existing); failed {
+			err := fmt.Errorf("kubernetes pod %q cannot start: %s", name, message)
+			if isPermanentPending(existing) {
+				return fmt.Errorf("%w: %w", err, providers.ErrPermanent)
+			}
+			return err
+		}
+		return nil
+	case "Running":
 		return nil
 	case "Succeeded", "Failed":
 		if err := p.deleteOwnedPod(ctx, name, labels); err != nil {
@@ -381,13 +403,20 @@ func (p *provider) CheckConnection(ctx context.Context, _ executionstore.Machine
 	if err == nil {
 		return nil
 	}
-	if status, ok := providers.HTTPStatus(err); ok &&
-		(status == http.StatusUnauthorized || status == http.StatusForbidden) {
-		return fmt.Errorf(
-			"kubernetes credentials were rejected (HTTP %d): the ServiceAccount bearer token is expired or invalid: %w",
-			status,
-			err,
-		)
+	if status, ok := providers.HTTPStatus(err); ok {
+		switch status {
+		case http.StatusUnauthorized:
+			return fmt.Errorf(
+				"kubernetes credentials were rejected (HTTP 401): the ServiceAccount bearer token is expired or invalid: %w",
+				err,
+			)
+		case http.StatusForbidden:
+			return fmt.Errorf(
+				"kubernetes credentials were rejected (HTTP 403): check the ServiceAccount token and the RoleBinding in namespace %q: %w",
+				p.namespace,
+				err,
+			)
+		}
 	}
 	if isNotFound(err) {
 		return fmt.Errorf("kubernetes namespace %q was not found: %w", p.namespace, err)
@@ -479,32 +508,86 @@ func ownedBy(actual, expected map[string]string) bool {
 // Pending nor Running, favoring scheduler and image-pull reasons so setup
 // mistakes surface instead of a bare phase.
 func podDetail(pod podObject) string {
-	if message := pendingMessage(pod); message != "" {
+	if message, failed := pendingFailure(pod); failed {
 		return message
 	}
 	return "phase " + pod.Status.Phase
 }
 
-func pendingMessage(pod podObject) string {
+// pendingFailure reports a Pod that is Pending for a reason worth surfacing
+// to the operator instead of waiting for the machine to time out.
+func pendingFailure(pod podObject) (string, bool) {
 	for _, condition := range pod.Status.Conditions {
 		if condition.Type == "PodScheduled" && condition.Status == "False" && condition.Message != "" {
-			return "unschedulable: " + condition.Message
+			return "unschedulable: " + condition.Message, true
 		}
 	}
 	for _, container := range pod.Status.ContainerStatuses {
 		if waiting := container.State.Waiting; waiting != nil {
 			switch waiting.Reason {
-			case "ContainerCreating", "PodInitializing", "ImagePullBackOff", "ErrImagePull",
-				"CreateContainerConfigError", "CreateContainerError", "InvalidImageName":
+			case "ImagePullBackOff", "ErrImagePull", "CreateContainerConfigError",
+				"CreateContainerError", "InvalidImageName":
 				if waiting.Message != "" {
-					return waiting.Reason + ": " + waiting.Message
+					return waiting.Reason + ": " + waiting.Message, true
 				}
-				return waiting.Reason
+				return waiting.Reason, true
 			}
 		}
-		if terminated := container.State.Terminated; terminated != nil && terminated.Message != "" {
-			return terminated.Reason + ": " + terminated.Message
+	}
+	return "", false
+}
+
+// isPermanentPending distinguishes configuration mistakes from conditions the
+// manager may retry (scheduling pressure, a registry that is temporarily down).
+func isPermanentPending(pod podObject) bool {
+	for _, container := range pod.Status.ContainerStatuses {
+		if waiting := container.State.Waiting; waiting != nil {
+			switch waiting.Reason {
+			case "InvalidImageName", "CreateContainerConfigError":
+				return true
+			}
 		}
 	}
-	return ""
+	return false
+}
+
+func (p *provider) waitForPodStartup(ctx context.Context, name string) error {
+	window := p.startupObservationWindow
+	if window <= 0 {
+		return nil
+	}
+	deadline := time.Now().Add(window)
+	for {
+		pod, found, err := p.api.InspectPod(ctx, name)
+		if err != nil {
+			return fmt.Errorf("inspect kubernetes pod %q: %w", name, err)
+		}
+		if found {
+			switch pod.Status.Phase {
+			case "Running":
+				return nil
+			case "Succeeded", "Failed":
+				return fmt.Errorf(
+					"kubernetes pod %q stopped before its daemon started: %w",
+					name,
+					providers.ErrResourceReplaced,
+				)
+			}
+			if message, failed := pendingFailure(pod); failed {
+				err := fmt.Errorf("kubernetes pod %q cannot start: %s", name, message)
+				if isPermanentPending(pod) {
+					return fmt.Errorf("%w: %w", err, providers.ErrPermanent)
+				}
+				return err
+			}
+		}
+		if time.Now().After(deadline) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }

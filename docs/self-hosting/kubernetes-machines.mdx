@@ -38,10 +38,30 @@ On a self-hosted deployment, a Kubernetes pool runs each machine as a Pod in a [
     rules:
       - apiGroups: [""]
         resources: ["pods"]
-        verbs: [get, list, watch, create, delete]
+        verbs: [get, list, create, delete]
       - apiGroups: [""]
         resources: ["secrets"]
-        verbs: [get, list, watch, create, update, patch, delete]
+        verbs: [get, create, update, delete]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: omnara-machines
+      namespace: omnara-machines
+    subjects:
+      - kind: ServiceAccount
+        name: omnara-machines
+        namespace: omnara-machines
+    roleRef:
+      kind: Role
+      name: omnara-machines
+      apiGroup: rbac.authorization.k8s.io
+    ```
+
+    Apply both objects:
+
+    ```bash
+    kubectl apply -f omnara-machines-rbac.yaml
     ```
   </Step>
 
@@ -52,7 +72,16 @@ On a self-hosted deployment, a Kubernetes pool runs each machine as a Pod in a [
     kubectl -n omnara-machines create token omnara-machines --duration 2160h
     ```
 
-    For a token that survives ServiceAccount churn, create a token Secret instead (`type: kubernetes.io/service-account-token` with the `kubernetes.io/service-account.name` annotation) and read `.data.token` from it. Either way, store the token in an organization secret together with the cluster's CA certificate:
+    Hosted clusters can cap token lifetime (`--service-account-max-token-expiration`). For a token that survives ServiceAccount churn, create a token Secret instead (`type: kubernetes.io/service-account-token` with the `kubernetes.io/service-account.name` annotation) and read `.data.token` from it.
+
+    Get the cluster CA in PEM form from your kubeconfig:
+
+    ```bash
+    kubectl config view --raw --minify \
+      -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d
+    ```
+
+    Store the token and CA in one organization secret:
 
     ```json
     {"ca": "-----BEGIN CERTIFICATE-----...", "token": "..."}
@@ -61,14 +90,31 @@ On a self-hosted deployment, a Kubernetes pool runs each machine as a Pod in a [
     If the token expires or is revoked, the pool's connection check says so instead of failing silently: it reports rejected credentials as expired or invalid rather than timing out.
   </Step>
 
+  <Step title="Choose a machine image">
+    The managed launcher needs a shell and basic networking tools inside the image: `/bin/sh`, `curl`, `base64`, `mktemp`, `tee`, `tail`, `mkfifo`, and `kill`. An image such as `buildpack-deps:24.04-curl`, or the image you already use for the other providers, works. A minimal image without `curl` starts but never installs the daemon.
+  </Step>
+
   <Step title="Create the pool">
     In the dashboard, create a machine pool with provider `kubernetes`:
 
-    - `api_base_url`: the API server's HTTPS address, such as `https://192.0.2.1:6443` — a bare host, never a kubeconfig file. Cloud kubeconfigs (EKS, GKE) sign in through `exec` plugins that would run commands on Omnara's servers, so they are not accepted.
+    - `api_base_url`: the API server's HTTPS address, such as `https://10.0.5.21:6443` — a bare host, never a kubeconfig file. Cloud kubeconfigs (EKS, GKE) sign in through `exec` plugins that would run commands on Omnara's servers, so they are not accepted.
     - credential secret: the JSON from the previous step, in an organization-owned secret. Never use in-cluster credentials: every organization on the deployment would share Omnara's own cluster access.
     - optional `namespace` (default `default`) and `runtime_class_name`, like Docker's `runtime`, for gVisor or Kata isolation.
-    - optional `daemon_api_url`: overrides the Omnara API URL baked into the machine environment (daemon callbacks only — the installer still downloads from the public URL). Only needed when machines cannot reach the public API URL, e.g. a cluster without hairpin access: point it at a cluster-local address such as `http://omnara-api.omnara.svc:8080/api/v1`. Plain `http` is accepted for `*.svc` / `*.svc.cluster.local` hosts.
     - `allowed_images` and the machine `image`, as with the other providers.
+  </Step>
+
+  <Step title="Allow the private API server address">
+    Omnara's outbound HTTP client only reaches public addresses by default. If the API server address is private (most self-hosted clusters), add it, with its port, to `OMNARA_PRIVATE_ENDPOINT_CIDRS` on the API, worker, and maintenance deployments:
+
+    ```bash
+    OMNARA_PRIVATE_ENDPOINT_CIDRS=10.0.5.21:6443
+    ```
+
+    The client matches the resolved IP (and the port) against this list, so resolve the hostname first and allow every address it can return. Use a CIDR when the address is not fixed:
+
+    ```bash
+    OMNARA_PRIVATE_ENDPOINT_CIDRS=10.0.5.0/24:6443
+    ```
   </Step>
 </Steps>
 
@@ -77,22 +123,39 @@ On a self-hosted deployment, a Kubernetes pool runs each machine as a Pod in a [
 - **One Pod per machine.** The Pod is named after the machine allocation (`omnara-mch-…`) and carries the `omnara-installation` and `omnara-machine` labels, mirroring Docker.
 - **Environment lives in a Secret.** The machine's environment — including the daemon token and the org's secret values, which Pod readers must not see — goes into a per-machine Secret loaded with `envFrom`. The Pod owns the Secret, so deleting the Pod deletes it.
 - **Hardened Pod spec.** Every machine Pod runs with `shareProcessNamespace: true` (so the pause container, not `omnarad`, stays PID 1 and reaps orphans), `automountServiceAccountToken: false`, `NET_RAW` dropped, a `RuntimeDefault` seccomp profile, `restartPolicy: Never`, and CPU and memory requests equal to limits.
-- **Unschedulable or unpullable images surface clearly.** A Pod stuck without nodes or failing to pull its image reports the scheduler or image reason instead of hanging silently. If the API server itself can't be reached, the machine is never reported as gone.
+- **Unschedulable or unpullable images surface clearly.** While provisioning watches the new Pod, an unschedulable condition or an image-pull error is reported with the scheduler or registry reason instead of hanging silently. If the API server itself can't be reached, the machine is never reported as gone.
 - **Machines share your nodes.** A machine can fill a node's disk and every machine on it feels it. Cap disk with a namespace `LimitRange`, and set a Pod PID limit on the nodes (`podPidsLimit`). `kubectl drain` needs `--force` for machine Pods, and namespaces that enforce the `restricted` Pod Security profile reject them.
-- **Machines can reach your network,** including the cloud metadata service and other workloads in the cluster. On a cluster that only runs Omnara machines, block both with a NetworkPolicy, for example:
+- **Machines can reach your network,** including the cloud metadata service and other workloads in the cluster. A default-deny egress policy that allows DNS and the Omnara API but blocks private ranges, including the metadata address, is:
 
   ```yaml
   apiVersion: networking.k8s.io/v1
   kind: NetworkPolicy
   metadata:
-    name: block-metadata
+    name: omnara-machines-egress
     namespace: omnara-machines
   spec:
     podSelector: {}
     policyTypes: [Egress]
     egress:
       - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchLabels:
+                k8s-app: kube-dns
+        ports:
+          - {protocol: UDP, port: 53}
+          - {protocol: TCP, port: 53}
+      - to:
           - ipBlock:
               cidr: 0.0.0.0/0
-              except: [169.254.169.254/32]
+              except:
+                - 10.0.0.0/8
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                - 100.64.0.0/10
+                - 169.254.169.254/32
   ```
+
+  This allows the public Omnara API while blocking cluster Pods, Services, nodes, and the IPv4 metadata endpoint. If Omnara itself is reachable only on a private address, add an explicit `ipBlock` for it. On IPv6 clusters, also block `fd00:ec2::254/128`.

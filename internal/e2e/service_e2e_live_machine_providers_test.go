@@ -105,7 +105,7 @@ func liveMachineProviders() []liveMachineProvider {
 			prepareStack: allowLiveKubernetesCluster,
 			pool: func(keys []string) (string, map[string]any) {
 				return keys[1], map[string]any{
-					"provider_config": map[string]any{"api_base_url": keys[0], "namespace": keys[2]},
+					"provider_config":                  map[string]any{"api_base_url": keys[0], "namespace": keys[2]},
 					"default_machine_provider_options": map[string]any{"image": "buildpack-deps:24.04-curl"},
 					"default_machine_cpu":              1,
 					"default_machine_memory_mb":        1024,

@@ -27,6 +27,7 @@ type fakeAPI struct {
 
 	podCreates    []podObject
 	secretCreates []secretObject
+	lastPutSecret secretObject
 	listCalls     int
 }
 
@@ -81,6 +82,11 @@ func (f *fakeAPI) PutSecretOwner(_ context.Context, secret secretObject, owner o
 	}
 	existing.Metadata.OwnerReferences = []ownerReference{owner}
 	existing.Metadata.ResourceVersion = secret.Metadata.ResourceVersion
+	// The API server replaces data with the PUT payload, so a read-modify-write
+	// that forgets Data must visibly wipe the Secret here.
+	existing.Data = secret.Data
+	existing.StringData = secret.StringData
+	f.lastPutSecret = secret
 	f.secrets[name] = existing
 	return nil
 }
@@ -149,7 +155,7 @@ func (f *fakeAPI) ListPods(_ context.Context, _ string) ([]podObject, error) {
 }
 
 func newTestProvider(api apiClient) *provider {
-	return &provider{api: api, namespace: "test-ns", omnaraAPIURL: "https://api.omnara.test/v1", installerBaseURL: "https://api.omnara.test/v1"}
+	return &provider{api: api, namespace: "test-ns", omnaraAPIURL: "https://api.omnara.test/v1", startupObservationWindow: 0}
 }
 
 func testMachineProvisioning(t *testing.T, image string, cpu, memoryMB int) executionstore.MachineProvisioningConfig {

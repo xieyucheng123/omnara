@@ -437,6 +437,9 @@ web-e2e: web-build-check db-up
 	cd frontend && pnpm --filter @omnara/web exec playwright install --only-shell chromium
 	$(SERVICE_E2E_ENV) $(GO) test -count=1 -v -run '^TestWebE2E$$' -tags='integration servicee2e webe2e' ./internal/e2e
 
+web-e2e-live-kubernetes:
+	cd frontend && pnpm --filter @omnara/web exec playwright test e2e/kubernetes-machine-pool-live.spec.ts --workers=1
+
 run-web:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	cd frontend && pnpm run dev

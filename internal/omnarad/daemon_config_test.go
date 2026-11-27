@@ -34,8 +34,6 @@ func TestCanonicalAPIURL(t *testing.T) {
 		{name: "loopback http", value: "http://127.0.0.1:8080/api/", want: "http://127.0.0.1:8080/api"},
 		{name: "ipv6 loopback", value: "http://[::1]:80/", want: "http://[::1]"},
 		{name: "docker host http", value: "http://host.docker.internal:8080/", want: "http://host.docker.internal:8080"},
-		{name: "cluster-local http", value: "http://api-trial.omnara.svc:8080/api/v1", want: "http://api-trial.omnara.svc:8080/api/v1"},
-		{name: "cluster-local fqdn http", value: "http://omnara-api.omnara.svc.cluster.local:8080/api/v1/", want: "http://omnara-api.omnara.svc.cluster.local:8080/api/v1"},
 		{name: "encoded base path", value: "https://example.com/a%2Fb/", want: "https://example.com/a%2Fb"},
 		{name: "encoded trailing slash", value: "https://example.com/base%2F/", want: "https://example.com/base%2F"},
 		{name: "non-loopback http", value: "http://example.com", wantErr: "must use https"},

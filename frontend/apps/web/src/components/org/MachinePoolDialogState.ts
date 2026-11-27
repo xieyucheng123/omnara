@@ -44,7 +44,7 @@ export const machinePoolProviders = Object.entries(machinePoolProviderDefinition
   .map(([value, definition]) => ({ value, label: definition.label }))
   .sort((a, b) => a.label.localeCompare(b.label))
 
-export function machinePoolCreatableProviders(dockerPoolsEnabled: boolean, kubernetesPoolsEnabled = false) {
+export function machinePoolCreatableProviders(dockerPoolsEnabled: boolean, kubernetesPoolsEnabled: boolean) {
   return machinePoolProviders.filter(
     (option) =>
       (dockerPoolsEnabled || option.value !== 'docker') &&
